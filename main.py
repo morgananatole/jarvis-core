@@ -12,13 +12,14 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, PlainTextResponse
 from motor.motor_asyncio import AsyncIOMotorClient
 from openai import AsyncOpenAI
-from pymongo.errors import DuplicateKeyError
+from pymongo.errors import DuplicateKeyError, InvalidURI, ConfigurationError, OperationFailure
 
 log = logging.getLogger("jarvis")
 REQUIRED = ("WHATSAPP_VERIFY_TOKEN", "META_APP_SECRET", "WHATSAPP_ACCESS_TOKEN",
             "WHATSAPP_PHONE_NUMBER_ID", "META_GRAPH_VERSION", "OPENAI_API_KEY",
             "OPENAI_MODEL", "MONGODB_URI", "JARVIS_INSTRUCTIONS")
 inbox = None
+storage_error = None
 
 
 def missing():
@@ -27,11 +28,17 @@ def missing():
 
 @asynccontextmanager
 async def lifespan(app):
-    global inbox
+    global inbox, storage_error
     mongo = None
+    inbox = None
+    storage_error = None
     if os.getenv("MONGODB_URI"):
-        mongo = AsyncIOMotorClient(os.environ["MONGODB_URI"], serverSelectionTimeoutMS=3000)
-        inbox = mongo[os.getenv("MONGODB_DATABASE", "jarvis")].inbox
+        try:
+            mongo = AsyncIOMotorClient(os.environ["MONGODB_URI"], serverSelectionTimeoutMS=3000)
+            inbox = mongo[os.getenv("MONGODB_DATABASE", os.getenv("DB_NAME", "jarvis"))].inbox
+        except (InvalidURI, ConfigurationError, ValueError):
+            storage_error = "invalid_connection_string"
+            log.warning("MongoDB configuration invalid; integration remains disabled")
     try:
         yield
     finally:
@@ -53,15 +60,19 @@ async def health():
 async def ready():
     absent = missing()
     storage = False
+    error = storage_error
     if inbox is not None:
         try:
             await inbox.database.command("ping")
             storage = True
+        except OperationFailure:
+            error = "authentication_or_permission_failed"
         except Exception:
-            pass
+            error = "database_unreachable"
     return JSONResponse(status_code=200 if not absent and storage else 503,
                         content={"configured": not absent, "missing": absent,
                                  "storage_available": storage,
+                                 "storage_error": error,
                                  "note": "Does not verify Meta registration or API credentials"})
 
 

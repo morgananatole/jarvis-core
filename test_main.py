@@ -101,3 +101,12 @@ class WebhookTests(unittest.TestCase):
 
     def test_malformed_json(self):
         self.assertEqual(self.post(['wrong']).status_code, 400)
+
+    def test_invalid_database_config_keeps_health_available(self):
+        with patch.object(main, 'AsyncIOMotorClient', side_effect=main.InvalidURI('redacted')):
+            with TestClient(main.app) as client:
+                self.assertEqual(client.get('/health').status_code, 200)
+                response = client.get('/ready')
+                self.assertEqual(response.status_code, 503)
+                self.assertEqual(response.json()['storage_error'], 'invalid_connection_string')
+                self.assertEqual(self.post(self.payload()).status_code, 503)

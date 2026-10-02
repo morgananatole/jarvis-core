@@ -28,6 +28,9 @@ Configure em Render Environment, nunca no GitHub:
 O servidor inicia sem credenciais, mas `/ready` retorna 503 e não recebe
 mensagens até a configuração estar completa. `/ready` não confirma validade
 das credenciais, publicação do app nem registro do telefone.
+Uma URI inválida também mantém `/health` disponível. `/ready` informa uma
+categoria de erro sem expor credenciais. `DB_NAME` é aceito como alternativa
+legada para `MONGODB_DATABASE`; não é necessário renomeá-lo.
 
 Na Meta: verificar callback, assinar `messages`, vincular app à conta WhatsApp
 e concluir requisitos de publicação do painel. O número ativo no WhatsApp
