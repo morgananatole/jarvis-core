@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>JARVIS | Protótipo de Voz</title>
+<style>body{font:18px system-ui;background:#10151e;color:#fff;max-width:650px;margin:35px auto;padding:16px}input,button{font:inherit;padding:12px;border-radius:8px;margin:6px 0}input{width:95%;background:#222d3b;color:#fff;border:1px solid #667}button{background:#90d6ff;border:0}#messages{white-space:pre-wrap;border:1px solid #667;padding:18px;min-height:100px}</style></head><body><h1>JARVIS · Protótipo</h1><p>Experimento de microfone, conversa e resposta falada. Exige servidor do ramo de desenvolvimento implantado com HTTPS e token pessoal configurado.</p>
+<label>URL do servidor (HTTPS)<input id="server" placeholder="https://seu-servidor.example"></label><label>Token pessoal (não compartilhe)<input id="token" type="password" autocomplete="off"></label>
+<button id="listen">Falar com JARVIS</button><button id="stop">Parar áudio</button><div id="messages" role="status" aria-live="polite"></div>
+<script>
+const $=id=>document.getElementById(id), messages=$('messages');
+const Speech=window.SpeechRecognition||window.webkitSpeechRecognition;
+if(!Speech){messages.textContent='Este navegador não disponibiliza reconhecimento de voz. Experimente Chrome Android.';$('listen').disabled=true;}
+$('stop').onclick=()=>speechSynthesis.cancel();
+$('listen').onclick=()=>{const r=new Speech();r.lang='pt-BR';r.interimResults=false;r.onresult=async ev=>{
+const utterance=ev.results[0][0].transcript;messages.textContent='Você: '+utterance+'\nJARVIS: processando...';
+try{
+const base=$('server').value.trim().replace(/\/$/,'');
+if(!base.startsWith('https://'))throw Error('Informe endereço HTTPS válido.');
+const response=await fetch(base+'/assistant/chat',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+$('token').value},body:JSON.stringify({message:utterance})});
+if(!response.ok)throw Error('Servidor retornou HTTP '+response.status);
+const answer=(await response.json()).reply;messages.textContent='Você: '+utterance+'\nJARVIS: '+answer;
+speechSynthesis.cancel();const spoken=new SpeechSynthesisUtterance(answer);spoken.lang='pt-BR';speechSynthesis.speak(spoken);
+}catch(e){messages.textContent='Falha na conexão: '+e.message+'\nÉ necessário habilitar CORS com origem confiável no servidor para usar a interface hospedada separadamente.'}};
+r.onerror=e=>{messages.textContent='Microfone: '+e.error};r.start();};
+</script></body></html>
