@@ -12,6 +12,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, PlainTextResponse
 from motor.motor_asyncio import AsyncIOMotorClient
 from openai import AsyncOpenAI
+from personal_voice_api import router as personal_router
 from pymongo.errors import DuplicateKeyError, InvalidURI, ConfigurationError, OperationFailure
 
 log = logging.getLogger("jarvis")
@@ -48,6 +49,7 @@ async def lifespan(app):
 
 
 app = FastAPI(title="JARVIS Core", lifespan=lifespan)
+app.include_router(personal_router)
 
 
 @app.get("/")
