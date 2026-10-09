@@ -156,3 +156,12 @@ class WebhookTests(unittest.TestCase):
                 self.assertEqual(response.status_code, 503)
                 self.assertEqual(response.json()['storage_error'], 'invalid_connection_string')
                 self.assertEqual(self.post(self.payload()).status_code, 503)
+
+
+class SenderAliasTests(unittest.TestCase):
+    def test_brazilian_ninth_digit_alias(self):
+        with patch.dict(main.os.environ, {'WHATSAPP_TEST_RECIPIENT': '5581989927699'}):
+            self.assertTrue(main.authorized_test_sender('5581989927699'))
+            self.assertTrue(main.authorized_test_sender('558189927699'))
+            self.assertFalse(main.authorized_test_sender('558188927699'))
+            self.assertFalse(main.authorized_test_sender('5584989927699'))
