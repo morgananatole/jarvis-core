@@ -1,4 +1,5 @@
 import hashlib
+import asyncio
 import hmac
 import json
 import time
@@ -93,6 +94,34 @@ class WebhookTests(unittest.TestCase):
         self.assertEqual(self.post(self.payload()).status_code, 503)
         self.assertEqual(self.client.get('/health').status_code, 200)
         self.assertEqual(self.client.get('/ready').status_code, 503)
+
+    def test_fixed_mode_does_not_require_paid_ai_and_only_replies_to_test_recipient(self):
+        main.os.environ.update(JARVIS_REPLY_MODE='test', WHATSAPP_TEST_RECIPIENT='5581989927699')
+        for key in ('OPENAI_API_KEY', 'OPENAI_MODEL', 'JARVIS_INSTRUCTIONS'):
+            main.os.environ.pop(key)
+        self.assertEqual(main.missing(), [])
+        self.assertEqual(self.post(self.payload()).status_code, 200)
+        self.generate.assert_not_called()
+        payload = self.payload()
+        payload['entry'][0]['changes'][0]['value']['messages'][0]['from'] = '5581989927699'
+        self.assertEqual(self.post(payload).status_code, 200)
+        self.deliver.assert_awaited_once()
+
+    def test_fixed_mode_never_constructs_openai_client(self):
+        self.ai.stop()
+        with patch.dict(main.os.environ, {'JARVIS_REPLY_MODE': 'test'}):
+            with patch.object(main, 'AsyncOpenAI', side_effect=AssertionError('paid API called')):
+                reply = asyncio.run(main.generate_reply('Olá'))
+                self.assertIn('resposta fixa', reply)
+                self.assertIn('sem uso de IA paga', reply)
+
+    def test_invalid_reply_mode_or_recipient_fails_closed(self):
+        main.os.environ['JARVIS_REPLY_MODE'] = 'invalid'
+        self.assertEqual(self.post(self.payload()).status_code, 503)
+        main.os.environ['JARVIS_REPLY_MODE'] = 'test'
+        for recipient in ('', '+5581989927699', '１２３４５６７８', 'abc', '123'):
+            main.os.environ['WHATSAPP_TEST_RECIPIENT'] = recipient
+            self.assertEqual(self.post(self.payload()).status_code, 503)
 
     def test_database_failure_does_not_acknowledge(self):
         self.inbox.insert_one = AsyncMock(side_effect=ConnectionError())

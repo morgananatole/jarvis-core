@@ -23,7 +23,17 @@ storage_error = None
 
 
 def missing():
-    return [key for key in REQUIRED if not os.getenv(key, "").strip()]
+    mode = os.getenv("JARVIS_REPLY_MODE", "openai")
+    if mode not in ("openai", "test"):
+        return ["JARVIS_REPLY_MODE"]
+    required = REQUIRED
+    if mode == "test":
+        required = tuple(key for key in REQUIRED if key not in
+                         ("OPENAI_API_KEY", "OPENAI_MODEL", "JARVIS_INSTRUCTIONS"))
+        recipient = os.getenv("WHATSAPP_TEST_RECIPIENT", "")
+        if not recipient.isascii() or not recipient.isdigit() or not 8 <= len(recipient) <= 15:
+            return ["WHATSAPP_TEST_RECIPIENT"]
+    return [key for key in required if not os.getenv(key, "").strip()]
 
 
 @asynccontextmanager
@@ -73,6 +83,7 @@ async def ready():
                         content={"configured": not absent, "missing": absent,
                                  "storage_available": storage,
                                  "storage_error": error,
+                                 "reply_mode": os.getenv("JARVIS_REPLY_MODE", "openai"),
                                  "note": "Does not verify Meta registration or API credentials"})
 
 
@@ -89,6 +100,10 @@ async def verify(request: Request):
 
 
 async def generate_reply(text):
+    if os.getenv("JARVIS_REPLY_MODE", "openai") == "test":
+        return ("Sou o JARVIS, assistente virtual da Nova Vida. "
+                "Recebi sua mensagem: este é um teste de conexão com resposta fixa, "
+                "sem uso de IA paga. O atendimento automático ainda está em implantação.")
     async with AsyncOpenAI(timeout=35, max_retries=0) as client:
         result = await client.responses.create(
             model=os.environ["OPENAI_MODEL"], store=False,
@@ -117,6 +132,9 @@ async def send_reply(sender, text):
 
 
 async def process_message(message):
+    if (os.getenv("JARVIS_REPLY_MODE", "openai") == "test"
+            and message["from"] != os.getenv("WHATSAPP_TEST_RECIPIENT", "")):
+        return
     timestamp = float(message["timestamp"])
     if timestamp < time.time() - 23 * 3600 or timestamp > time.time() + 300:
         return

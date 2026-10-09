@@ -24,6 +24,17 @@ Configure em Render Environment, nunca no GitHub:
 | MONGODB_URI | Banco MongoDB persistente acessível pelo serviço |
 | MONGODB_DATABASE | Opcional; padrão jarvis |
 | JARVIS_INSTRUCTIONS | Informações aprovadas da empresa e contato humano |
+| JARVIS_REPLY_MODE | `openai` (padrão) ou `test` (resposta fixa sem chamada de IA) |
+| WHATSAPP_TEST_RECIPIENT | No modo `test`, telefone autorizado com país e DDD, somente dígitos |
+
+No modo `test`, o servidor responde somente ao remetente autorizado em
+`WHATSAPP_TEST_RECIPIENT`, sem construir cliente OpenAI. Não exige
+`OPENAI_API_KEY`, `OPENAI_MODEL` ou `JARVIS_INSTRUCTIONS`; ainda exige
+credenciais Meta válidas, registro do número, assinatura de webhooks e MongoDB.
+Uma configuração inválida falha fechada. `/ready` informa `reply_mode`.
+Este modo não é atendimento inteligente, não envia campanhas e não comprova
+isenção de cobrança da Meta. Use o número gratuito de teste da Meta para
+verificar transporte antes de migrar um número comercial.
 
 O servidor inicia sem credenciais, mas `/ready` retorna 503 e não recebe
 mensagens até a configuração estar completa. `/ready` não confirma validade
@@ -34,8 +45,9 @@ legada para `MONGODB_DATABASE`; não é necessário renomeá-lo.
 
 Na Meta: verificar callback, assinar `messages`, vincular app à conta WhatsApp
 e concluir requisitos de publicação do painel. O número ativo no WhatsApp
-Business precisa de fluxo compatível; não excluir a conta do celular para
-contornar o erro de registro.
+Business precisa de fluxo compatível. A migração tradicional pode exigir
+liberar o registro no aplicativo; não excluir a conta sem esclarecer perda
+de histórico e grupos e obter confirmação específica do responsável.
 
 ## Limitações e operação
 
