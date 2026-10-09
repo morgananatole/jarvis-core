@@ -48,7 +48,7 @@ def assess(evidence: IntegrationEvidence) -> dict:
     transport = (ready and evidence.official_phone_configured
                  and evidence.webhook_subscription_confirmed
                  and evidence.inbound_confirmed and evidence.delivery_confirmed)
-    intelligent = transport and evidence.reply_mode == "openai" and evidence.ai_reply_confirmed
+    intelligent = transport and evidence.reply_mode in ("openai", "hybrid") and evidence.ai_reply_confirmed
     return {
         "capability": "integration_preflight", "version": 1,
         "architecture": ["Capability Forge", "Execution Trust Kernel", "Evidence Log"],
@@ -80,7 +80,7 @@ def read_ready(url: str) -> IntegrationEvidence:
     return IntegrationEvidence(
         configured=payload.get("configured") is True,
         storage_available=payload.get("storage_available") is True,
-        reply_mode=mode if mode in ("test", "openai") else "unknown",
+        reply_mode=mode if mode in ("test", "openai", "hybrid") else "unknown",
     )
 
 

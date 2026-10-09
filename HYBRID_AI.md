@@ -16,6 +16,8 @@ Variáveis para ativar: `JARVIS_REPLY_MODE=hybrid`, `GROQ_API_KEY`,
 Reserva paga só liga com `AI_PAID_FALLBACK_ENABLED=true` e
 `AI_PAID_MAX_CALLS_PER_DAY` maior que zero. Padrão: zero chamadas pagas.
 `AI_MAX_OUTPUT_TOKENS` padrão 300, máximo 500.
+O modelo gratuito de raciocínio recebe pelo menos 1.024 tokens, com esforço
+baixo e sem expor raciocínio na resposta. O teto diário pago reinicia em UTC.
 
 São enviados no máximo seis turnos recentes, com limite de texto. Histórico
 usa identificador HMAC por telefone, expira em sete dias e é comum às duas IAs.

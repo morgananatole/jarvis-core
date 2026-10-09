@@ -67,12 +67,15 @@ async def provider_call(provider, messages, config):
     if provider == 'free':
         import httpx
         try:
+            payload = {'model': config['free_model'], 'messages': messages,
+                       'max_completion_tokens': max(1024, config['output'])}
+            if config['free_model'].startswith('openai/gpt-oss-'):
+                payload.update(reasoning_effort='low', include_reasoning=False)
             async with httpx.AsyncClient(timeout=12) as client:
                 response = await client.post(
                     'https://api.groq.com/openai/v1/chat/completions',
                     headers={'Authorization': 'Bearer ' + config['free_key']},
-                    json={'model': config['free_model'], 'messages': messages,
-                          'max_completion_tokens': config['output']})
+                    json=payload)
             if response.is_error:
                 raise ProviderFailure(
                     response.status_code in (408, 429) or response.status_code >= 500,

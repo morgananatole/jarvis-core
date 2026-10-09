@@ -5,7 +5,7 @@ import unittest
 from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
-from ai_router import ReplyRouter, ProviderFailure, UNAVAILABLE, wait_seconds, reset_seconds
+from ai_router import ReplyRouter, ProviderFailure, UNAVAILABLE, wait_seconds, reset_seconds, provider_call, settings
 
 
 class Collection:
@@ -130,6 +130,32 @@ class RouterTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(wait_seconds('bad'), 60)
         self.assertEqual(reset_seconds('2m59s'), 179)
         self.assertEqual(reset_seconds('500ms'), 1)
+
+    async def test_real_http_adapter_success_and_zero_quota(self):
+        import httpx
+        original = httpx.AsyncClient
+        def handle(request):
+            import json
+            payload = json.loads(request.content)
+            self.assertEqual(payload['reasoning_effort'], 'low')
+            self.assertFalse(payload['include_reasoning'])
+            return httpx.Response(200, json={'choices': [{'message': {'content': 'entendi'}}]},
+                headers={'x-ratelimit-remaining-tokens': '0', 'x-ratelimit-reset-tokens': '2m59s'})
+        with patch('httpx.AsyncClient', side_effect=lambda **kw: original(
+                transport=httpx.MockTransport(handle), **kw)):
+            self.assertEqual(await provider_call('free', [], settings()), ('entendi', 179))
+
+    async def test_real_http_adapter_429_and_401(self):
+        import httpx
+        original = httpx.AsyncClient
+        for status, transient in ((429, True), (401, False)):
+            with patch('httpx.AsyncClient', side_effect=lambda **kw: original(
+                    transport=httpx.MockTransport(lambda r: httpx.Response(
+                        status, headers={'retry-after': '3600'})), **kw)):
+                with self.assertRaises(ProviderFailure) as ctx:
+                    await provider_call('free', [], settings())
+                self.assertEqual(ctx.exception.transient, transient)
+                self.assertEqual(ctx.exception.retry_after, 3600)
 
 
 if __name__ == '__main__':
