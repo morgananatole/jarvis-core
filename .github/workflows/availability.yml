@@ -1,0 +1,43 @@
+name: JARVIS availability
+
+on:
+  schedule:
+    - cron: '3,13,23,33,43,53 * * * *'
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/availability.yml'
+
+permissions: {}
+
+concurrency:
+  group: jarvis-availability
+  cancel-in-progress: false
+
+jobs:
+  check:
+    # Do not incur private-repository Actions charges if visibility changes.
+    if: github.event.repository.private == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Check public service and database readiness
+        env:
+          READY_URL: https://jarvis-core-ou8d.onrender.com/ready
+        run: |
+          python3 - <<'PY'
+          import json, os, time, urllib.request
+          for attempt in range(3):
+              try:
+                  with urllib.request.urlopen(os.environ['READY_URL'], timeout=75) as response:
+                      data = json.load(response)
+                  if data.get('configured') is True and data.get('storage_available') is True:
+                      print('JARVIS service and storage ready; mode:', data.get('reply_mode'))
+                      break
+              except Exception:
+                  pass
+              if attempt == 2:
+                  raise SystemExit('JARVIS unavailable or not ready; inspect Render logs')
+              time.sleep(5)
+          PY
