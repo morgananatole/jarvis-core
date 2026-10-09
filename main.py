@@ -124,7 +124,7 @@ async def generate_reply(text):
 
 async def send_reply(sender, text):
     if os.getenv("JARVIS_REPLY_MODE", "openai") == "test":
-        if sender != os.getenv("WHATSAPP_TEST_RECIPIENT", ""):
+        if not authorized_test_sender(sender):
             raise ValueError("unauthorized_test_recipient")
         sender = os.getenv("WHATSAPP_TEST_DESTINATION", sender)
     url = ("https://graph.facebook.com/" + os.environ["META_GRAPH_VERSION"]
@@ -145,15 +145,23 @@ async def send_reply(sender, text):
         return response.json()["messages"][0]["id"]
 
 
+def authorized_test_sender(sender):
+    authorized = os.getenv("WHATSAPP_TEST_RECIPIENT", "")
+    if sender == authorized:
+        return True
+    # Brazil mobile numbers can appear with or without the ninth digit.
+    # Only accept the same country code, area code and remaining digits.
+    return (len(authorized) == 13 and authorized.startswith("55")
+            and authorized[4] == "9"
+            and len(sender) == 12
+            and sender == authorized[:4] + authorized[5:])
+
+
 async def process_message(message):
     if (os.getenv("JARVIS_REPLY_MODE", "openai") == "test"
-            and message["from"] != os.getenv("WHATSAPP_TEST_RECIPIENT", "")):
-        authorized = os.getenv("WHATSAPP_TEST_RECIPIENT", "")
-        alias_match = (len(authorized) == 13 and authorized.startswith("55")
-                       and authorized[4] == "9"
-                       and message["from"] == authorized[:4] + authorized[5:])
-        log.warning("Test sender rejected: digits=%s authorized_brazil_alias=%s",
-                    len(message["from"]), alias_match)
+            and not authorized_test_sender(message["from"])):
+        log.warning("Test sender rejected: digits=%s authorized_brazil_alias=False",
+                    len(message["from"]))
         return
     log.warning("Authorized text received for configured phone")
     timestamp = float(message["timestamp"])
