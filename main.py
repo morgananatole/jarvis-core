@@ -148,7 +148,14 @@ async def send_reply(sender, text):
 async def process_message(message):
     if (os.getenv("JARVIS_REPLY_MODE", "openai") == "test"
             and message["from"] != os.getenv("WHATSAPP_TEST_RECIPIENT", "")):
+        authorized = os.getenv("WHATSAPP_TEST_RECIPIENT", "")
+        alias_match = (len(authorized) == 13 and authorized.startswith("55")
+                       and authorized[4] == "9"
+                       and message["from"] == authorized[:4] + authorized[5:])
+        log.warning("Test sender rejected: digits=%s authorized_brazil_alias=%s",
+                    len(message["from"]), alias_match)
         return
+    log.warning("Authorized text received for configured phone")
     timestamp = float(message["timestamp"])
     if timestamp < time.time() - 23 * 3600 or timestamp > time.time() + 300:
         return
