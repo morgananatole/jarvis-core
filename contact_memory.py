@@ -42,7 +42,7 @@ def unpack_reply(raw, source_text):
     except (ValueError, TypeError):
         return raw, {}
     if not isinstance(data, dict) or not isinstance(data.get('reply'), str):
-        return raw, {}
+        raise ValueError('invalid_structured_reply')
     facts = {}
     for field, item in (data.get('facts') or {}).items() if isinstance(data.get('facts'), dict) else []:
         if field not in FIELDS or not isinstance(item, dict):
@@ -157,7 +157,7 @@ class ContactMemory:
                     continue
                 signals['signals.' + kind] = True
         # Immediate opt-out suppression, including while AI is unavailable.
-        if re.search(r'\b(não me mande|nao me mande|não me envie|nao me envie|não quero receber|nao quero receber|pare de enviar|remova meu contato)\b', lower):
+        if lower.strip() == 'parar' or re.search(r'\b(não me mande|nao me mande|não me envie|nao me envie|não quero receber|nao quero receber|pare de enviar|remova meu contato)\b', lower):
             signals['do_not_contact'] = True
         await self.db.contacts.update_one({'_id': key}, {
             '$set': {'last_inbound_at': datetime.fromtimestamp(timestamp, timezone.utc), **signals},
@@ -186,7 +186,12 @@ class ContactMemory:
                 'requires_permission_check': True, 'requires_window_or_template': True,
                 'requires_review': True,
                 'automatic_send_enabled': False}
-        # One pending conversation per contact; update it instead of creating spam.
+        active = await self.db.conversation_tasks.find_one({'_id': key + ':next'})
+        if active and active.get('state') == 'sending':
+            # A claimed send is never made retryable by an incoming message.
+            await self.db.conversation_tasks.update_one({'_id': key + ':next'}, {'$set': {'next_plan': task}})
+            return
+        # A new inbound cancels previous approval; one pending conversation per contact.
         await self.db.conversation_tasks.update_one({'_id': key + ':next'}, {'$set': task}, upsert=True)
 
     async def context(self, phone):

@@ -1,4 +1,5 @@
 """Authenticated WhatsApp webhook with persistent duplicate protection."""
+import asyncio
 import hashlib
 import hmac
 import json
@@ -15,6 +16,9 @@ from openai import AsyncOpenAI
 from pymongo.errors import DuplicateKeyError, InvalidURI, ConfigurationError, OperationFailure
 from ai_router import ReplyRouter
 from contact_memory import ContactMemory
+from conversation_service import ConversationService, delivery_status
+from media_service import send_photo
+from crm_admin import router as crm_router, panel
 
 log = logging.getLogger("jarvis")
 REQUIRED = ("WHATSAPP_VERIFY_TOKEN", "META_APP_SECRET", "WHATSAPP_ACCESS_TOKEN",
@@ -69,15 +73,37 @@ async def lifespan(app):
         except (InvalidURI, ConfigurationError, ValueError):
             storage_error = "invalid_connection_string"
             log.warning("MongoDB configuration invalid; integration remains disabled")
+    worker = None
+    async def run_conversations():
+        while True:
+            try:
+                if os.getenv('CONVERSATION_EXECUTOR_ENABLED', 'false') == 'true' and inbox is not None:
+                    tasks = await inbox.database.conversation_tasks.find({'state': 'approved'}).limit(10).to_list(10)
+                    for task in tasks:
+                        await ConversationService(inbox.database, send_reply, authorized_test_sender).run_one(task['_id'])
+            except Exception:
+                log.warning('Conversation worker deferred; review required')
+            await asyncio.sleep(60)
+    if inbox is not None:
+        worker = asyncio.create_task(run_conversations())
     try:
         yield
     finally:
+        if worker:
+            worker.cancel()
+            try:
+                await worker
+            except asyncio.CancelledError:
+                pass
         if mongo is not None:
             mongo.close()
         inbox = None
 
 
 app = FastAPI(title="JARVIS Core", lifespan=lifespan)
+app.include_router(crm_router(lambda: inbox.database if inbox is not None else None,
+    lambda db: ConversationService(db, send_reply, authorized_test_sender)))
+app.get('/painel')(panel)
 
 
 @app.get("/")
@@ -216,6 +242,11 @@ async def process_message(message):
         await inbox.update_one({"_id": job["_id"]}, {"$set": {
             "state": "sent", "outbound_id": message_id}})
         await memory.record_outbound(message["from"], message_id, reply)
+        job_state = await inbox.find_one({'_id': job['_id']})
+        if job_state.get('media_key'):
+            await inbox.update_one({'_id': job['_id']}, {'$set': {'media_state': 'sending'}})
+            photo_id = await send_photo(inbox.database, message['from'], job_state['media_key'])
+            await inbox.update_one({'_id': job['_id']}, {'$set': {'media_state': 'accepted', 'photo_id': photo_id}})
     except Exception:
         log.warning("Reply failed or uncertain; manual review required")
         await inbox.update_one({"_id": job["_id"]}, {"$set": {"state": "review_required"}})
@@ -242,11 +273,13 @@ async def receive(request: Request):
         raise HTTPException(503, "Integration not configured")
     try:
         messages = []
+        statuses = []
         for entry in payload.get("entry", []):
             for change in entry.get("changes", []):
                 value = change.get("value", {})
                 if value.get("metadata", {}).get("phone_number_id") != os.environ["WHATSAPP_PHONE_NUMBER_ID"]:
                     continue
+                statuses.extend(value.get("statuses", []))
                 for message in value.get("messages", []):
                     if message.get("type") == "text" and message.get("text", {}).get("body"):
                         if not message.get("id") or not message.get("from"):
@@ -256,6 +289,8 @@ async def receive(request: Request):
     except (KeyError, TypeError, ValueError, AttributeError):
         raise HTTPException(400, "Malformed webhook")
     try:
+        for status in statuses:
+            await delivery_status(inbox.database, status)
         for message in messages:
             await process_message(message)
     except Exception:
