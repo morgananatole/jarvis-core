@@ -33,6 +33,9 @@ def missing():
         recipient = os.getenv("WHATSAPP_TEST_RECIPIENT", "")
         if not recipient.isascii() or not recipient.isdigit() or not 8 <= len(recipient) <= 15:
             return ["WHATSAPP_TEST_RECIPIENT"]
+        destination = os.getenv("WHATSAPP_TEST_DESTINATION", recipient)
+        if not destination.isascii() or not destination.isdigit() or not 8 <= len(destination) <= 15:
+            return ["WHATSAPP_TEST_DESTINATION"]
     return [key for key in required if not os.getenv(key, "").strip()]
 
 
@@ -120,6 +123,10 @@ async def generate_reply(text):
 
 
 async def send_reply(sender, text):
+    if os.getenv("JARVIS_REPLY_MODE", "openai") == "test":
+        if sender != os.getenv("WHATSAPP_TEST_RECIPIENT", ""):
+            raise ValueError("unauthorized_test_recipient")
+        sender = os.getenv("WHATSAPP_TEST_DESTINATION", sender)
     url = ("https://graph.facebook.com/" + os.environ["META_GRAPH_VERSION"]
            + "/" + os.environ["WHATSAPP_PHONE_NUMBER_ID"] + "/messages")
     async with httpx.AsyncClient(timeout=15) as client:
@@ -127,6 +134,13 @@ async def send_reply(sender, text):
             "Authorization": "Bearer " + os.environ["WHATSAPP_ACCESS_TOKEN"]}, json={
                 "messaging_product": "whatsapp", "to": sender,
                 "type": "text", "text": {"body": text}})
+        if response.is_error:
+            try:
+                code = response.json().get("error", {}).get("code")
+            except (ValueError, AttributeError):
+                code = None
+            log.warning("Meta reply rejected: http_status=%s code=%s",
+                        response.status_code, code if isinstance(code, int) else "unknown")
         response.raise_for_status()
         return response.json()["messages"][0]["id"]
 

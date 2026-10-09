@@ -26,6 +26,7 @@ Configure em Render Environment, nunca no GitHub:
 | JARVIS_INSTRUCTIONS | Informações aprovadas da empresa e contato humano |
 | JARVIS_REPLY_MODE | `openai` (padrão) ou `test` (resposta fixa sem chamada de IA) |
 | WHATSAPP_TEST_RECIPIENT | No modo `test`, telefone autorizado com país e DDD, somente dígitos |
+| WHATSAPP_TEST_DESTINATION | Opcional: formato do mesmo telefone aprovado na lista Meta, quando diferente do `from` recebido |
 
 No modo `test`, o servidor responde somente ao remetente autorizado em
 `WHATSAPP_TEST_RECIPIENT`, sem construir cliente OpenAI. Não exige
@@ -35,6 +36,12 @@ Uma configuração inválida falha fechada. `/ready` informa `reply_mode`.
 Este modo não é atendimento inteligente, não envia campanhas e não comprova
 isenção de cobrança da Meta. Use o número gratuito de teste da Meta para
 verificar transporte antes de migrar um número comercial.
+Use o `from` observado no webhook como `WHATSAPP_TEST_RECIPIENT`. Alguns
+números brasileiros aparecem sem o nono dígito; nesses casos a lista de teste
+pode exigir o telefone original em `WHATSAPP_TEST_DESTINATION`. Não transforme
+números de outros clientes automaticamente. Erros HTTP de envio registram apenas
+status e código numérico, sem conteúdo ou credenciais. Aceitação da API não
+prova entrega: confirme o status do webhook da Meta.
 
 O servidor inicia sem credenciais, mas `/ready` retorna 503 e não recebe
 mensagens até a configuração estar completa. `/ready` não confirma validade

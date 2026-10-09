@@ -4,6 +4,7 @@ import hmac
 import json
 import time
 import unittest
+import httpx
 from unittest.mock import AsyncMock, patch
 
 from fastapi.testclient import TestClient
@@ -114,6 +115,22 @@ class WebhookTests(unittest.TestCase):
                 reply = asyncio.run(main.generate_reply('Olá'))
                 self.assertIn('resposta fixa', reply)
                 self.assertIn('sem uso de IA paga', reply)
+
+    def test_fixed_mode_uses_authorized_destination_alias_only(self):
+        self.send.stop()
+        client = AsyncMock()
+        client.post.return_value = httpx.Response(200, json={'messages': [{'id': 'test-send-id'}]},
+                                                   request=httpx.Request('POST', 'https://example.test'))
+        with patch.dict(main.os.environ, {'JARVIS_REPLY_MODE': 'test',
+                                         'WHATSAPP_TEST_RECIPIENT': '558189927699',
+                                         'WHATSAPP_TEST_DESTINATION': '5581989927699'}):
+            with patch.object(main.httpx, 'AsyncClient') as factory:
+                factory.return_value.__aenter__.return_value = client
+                self.assertEqual(asyncio.run(main.send_reply('558189927699', 'Teste')), 'test-send-id')
+                self.assertEqual(client.post.call_args.kwargs['json']['to'], '5581989927699')
+                with self.assertRaises(ValueError):
+                    asyncio.run(main.send_reply('other', 'Teste'))
+                client.post.assert_awaited_once()
 
     def test_invalid_reply_mode_or_recipient_fails_closed(self):
         main.os.environ['JARVIS_REPLY_MODE'] = 'invalid'
