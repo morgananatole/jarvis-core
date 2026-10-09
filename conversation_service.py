@@ -3,9 +3,12 @@ import os
 from datetime import datetime, timedelta, timezone
 from contact_memory import ContactMemory
 from ai_router import ReplyRouter, UNAVAILABLE
+from human_service import conversation_lock
 
 
 def gate(profile, now, tester):
+    if profile.get('human_mode'):
+        return 'human_takeover'
     if profile.get('do_not_contact') or profile.get('facts', {}).get('contact_permission', {}).get('value') != 'allowed':
         return 'permission_required'
     if os.getenv('AI_ALLOWED_TEST_ONLY', 'true') == 'true' and not tester(profile['phone']):
@@ -25,6 +28,13 @@ class ConversationService:
         self.db, self.send, self.tester = db, send, tester
 
     async def run_one(self, task_id):
+        pending = await self.db.conversation_tasks.find_one({'_id': task_id})
+        if not pending:
+            return {'state': 'not_claimed'}
+        async with conversation_lock(pending['contact_key']):
+            return await self._run_one(task_id)
+
+    async def _run_one(self, task_id):
         now = datetime.now(timezone.utc)
         # Claims survive restarts. Never retry a request with uncertain acceptance.
         task = await self.db.conversation_tasks.find_one_and_update(

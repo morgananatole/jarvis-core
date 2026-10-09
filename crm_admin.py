@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import HTMLResponse
 from contact_memory import ContactMemory
+from human_service import HumanService
 from import_google_contacts import rows_to_contacts
 
 
@@ -80,6 +81,38 @@ def router(database, conversation):
         if not profile:
             raise HTTPException(404, 'Contact not found')
         return await conversation(db()).run_one(profile['_id'] + ':next')
+
+    @api.get('/human')
+    async def human_queue():
+        rows = await db().human_requests.find({'state': {'$in': ['waiting', 'active']}}).sort(
+            [('priority', -1), ('updated_at', -1)]).limit(200).to_list(200)
+        result = []
+        for row in rows:
+            profile = await db().contacts.find_one({'_id': row['_id']})
+            row['contact_name'] = (profile or {}).get('facts', {}).get('contact_name', {}).get('value', '')
+            result.append(row)
+        return jsonable_encoder(result)
+
+    @api.post('/contacts/{number}/mode')
+    async def mode(number: int, request: Request):
+        body = await request.json()
+        if body.get('mode') not in {'human', 'jarvis'}:
+            raise HTTPException(400, 'Choose human or jarvis')
+        service = conversation(db())
+        try:
+            return await HumanService(db(), service.send, service.tester).mode(number, body['mode'] == 'human')
+        except ValueError as error:
+            raise HTTPException(404, str(error))
+
+    @api.post('/contacts/{number}/reply')
+    async def operator_reply(number: int, request: Request):
+        body = await request.json()
+        service = conversation(db())
+        try:
+            return await HumanService(db(), service.send, service.tester).reply(
+                number, body.get('text'), request.headers.get('idempotency-key'))
+        except ValueError as error:
+            raise HTTPException(409, str(error))
 
     @api.post('/import/google')
     async def import_google(request: Request):
@@ -165,7 +198,7 @@ def router(database, conversation):
 
 
 def panel():
-    # Credential is kept only in JavaScript memory, never in URLs or browser storage.
-    return HTMLResponse('''<!doctype html><html lang="pt-BR"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>JARVIS · Conversas</title><style>body{font:16px system-ui;max-width:1000px;margin:32px auto;padding:16px;background:#f4f7f8;color:#182d35}button,input{padding:10px;margin:5px}article{background:white;padding:16px;margin:12px 0;border-radius:12px}pre{white-space:pre-wrap}h1{color:#14665d}</style><h1>JARVIS · Conversas futuras</h1><p>Retome cada vínculo com objetivo e contexto. Aprovar não dispensa autorização do contato nem as regras do WhatsApp.</p><input id="credential" type="password" autocomplete="off" placeholder="Credencial privada do CRM"><button id="connect">Entrar</button><button id="exit">Sair</button><p id="status"></p><section id="workspace" hidden><button id="refresh">Atualizar</button><label>Importar Google CSV <input id="csv" type="file" accept=".csv"></label><h2>Conversas</h2><div id="tasks"></div><h2>Fotos autorizadas</h2><input id="photoKey" placeholder="Identificador: estrutura_natal"><input id="photoTheme" placeholder="O que esta foto mostra"><input id="photoCaption" placeholder="Legenda"><input id="photoFile" type="file" accept="image/jpeg,image/png"><label><input id="photoApproved" type="checkbox">Foto autorizada para atendimento</label><button id="uploadPhoto">Cadastrar foto</button><h2>Contatos</h2><button id="previous">Anterior</button><button id="next">Próxima página</button><div id="contacts"></div></section><script>
-let token='',page=0;const el=id=>document.getElementById(id);async function api(path,method='GET',body){let r=await fetch('/crm/'+path,{method,headers:{Authorization:'Bearer '+token,...(body&&typeof body==='string'?{'Content-Type':'application/json'}:{})},body});if(!r.ok)throw Error('Não foi possível concluir ('+r.status+').');return r.json()};function text(parent,s){let p=document.createElement('p');p.textContent=s;parent.append(p)}function button(parent,s,action){let b=document.createElement('button');b.textContent=s;b.onclick=()=>action().catch(e=>el('status').textContent=e.message);parent.append(b)}async function load(){let [contacts,tasks]=await Promise.all([api('contacts?page='+page),api('tasks')]);el('contacts').replaceChildren();el('tasks').replaceChildren();for(let c of contacts){let a=document.createElement('article');text(a,'#'+c.contact_no+' · '+(c.facts?.contact_name?.value||'Nome ainda não informado'));button(a,'Ver histórico',async()=>{let d=await api('contacts/'+c.contact_no);let p=document.createElement('pre');p.textContent=JSON.stringify(d,null,2);a.append(p)});el('contacts').append(a)}for(let t of tasks){let a=document.createElement('article');text(a,'#'+t.contact_no+' · '+t.state+' · '+t.purpose);text(a,t.due_at?new Date(t.due_at).toLocaleString('pt-BR'):'Sem data');button(a,'Aprovar',async()=>{await api('tasks/'+t.contact_no+'/review','POST',JSON.stringify({state:'approved'}));await load()});button(a,'Remarcar',async()=>{let purpose=prompt('Objetivo da conversa',t.purpose);let due=prompt('Data e hora com fuso (ex.: 2026-10-12T10:00:00-03:00)',t.due_at||'');if(purpose&&due){await api('tasks/'+t.contact_no+'/review','POST',JSON.stringify({state:'held',purpose,due_at:due}));await load()}});button(a,'Suspender',async()=>{await api('tasks/'+t.contact_no+'/review','POST',JSON.stringify({state:'held'}));await load()});button(a,'Executar retorno aprovado',async()=>{let r=await api('tasks/'+t.contact_no+'/run','POST');el('status').textContent=JSON.stringify(r);await load()});el('tasks').append(a)}el('workspace').hidden=false}el('connect').onclick=async()=>{token=el('credential').value;el('credential').value='';try{await load();el('status').textContent='Acesso privado ativo';}catch(e){token='';el('status').textContent=e.message}};el('exit').onclick=()=>{token='';el('workspace').hidden=true;el('contacts').replaceChildren();el('tasks').replaceChildren();el('status').textContent='Sessão encerrada'};el('refresh').onclick=()=>load().catch(e=>el('status').textContent=e.message);el('previous').onclick=()=>{page=Math.max(0,page-1);load().catch(e=>el('status').textContent=e.message)};el('next').onclick=()=>{page++;load().catch(e=>el('status').textContent=e.message)};el('uploadPhoto').onclick=async()=>{try{let f=el('photoFile').files[0];if(!f||f.size>5242880)throw Error('Escolha JPEG ou PNG até 5 MB');let image=await new Promise((resolve,reject)=>{let r=new FileReader();r.onload=()=>resolve(r.result.split(',')[1]);r.onerror=reject;r.readAsDataURL(f)});await api('media/'+encodeURIComponent(el('photoKey').value)+'/upload','POST',JSON.stringify({image,theme:el('photoTheme').value,caption:el('photoCaption').value,approved:el('photoApproved').checked}));el('status').textContent='Foto cadastrada no catálogo privado';el('photoFile').value=''}catch(e){el('status').textContent=e.message}};el('csv').onchange=async()=>{try{let f=el('csv').files[0];if(f.size>8388608)throw Error('CSV excede 8 MB');let r=await api('import/google','POST',await f.arrayBuffer());el('status').textContent=JSON.stringify(r);await load()}catch(e){el('status').textContent=e.message}finally{el('csv').value=''}};
-</script></html>''', headers={'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer', 'Content-Security-Policy': "default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'"})
+    from pathlib import Path
+    return HTMLResponse(Path(__file__).with_name('panel.html').read_text(encoding='utf-8'), headers={
+        'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer',
+        'Content-Security-Policy': "default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'"})

@@ -35,17 +35,17 @@ Uma aceitação de envio não prova entrega; o vínculo deve usar as respostas r
 Importação: `python import_google_contacts.py contatos.csv` no ambiente privado
 com MONGODB_URI e chave de identidade configuradas. Importador suporta CSV exportado
 pelo Google com telefones em formato internacional, deduplica e prepara tarefas.
-Não há acesso conectado ao Google Contacts nesta sessão; a lista não foi importada.
+A agenda Google foi consultada, mas a exportação não entregou o CSV ao navegador; a lista não foi importada.
 
-Para executar as conversas planejadas faltam: conta Groq ativa, executor de tarefas,
-painel privado para revisar perfis e agenda, consentimento/opt-out, templates
-aprovados para reabertura fora da janela de atendimento e rastreio de entrega.
+O roteador Groq, o painel privado, o executor e o rastreio de entrega estão implementados.
+Para ativar retornos faltam revisão por contato, autorização registrada e templates
+aprovados para reabertura fora da janela de atendimento.
 Todos os envios proativos permanecem desligados. Não há disparo para toda a agenda.
 
 Fotos: a API aceita imagem via media ID ou URL HTTPS. Criar catálogo de imagens
 aprovadas com unidade, tema e legenda; a IA escolhe item do catálogo, nunca inventa
-URL ou usa fotos pessoais de outros contatos. Faltam ativos aprovados, catálogo e
-integração de envio/teste. Esta mudança não envia fotos.
+URL ou usa fotos pessoais de outros contatos. O catálogo e envio estão implementados; faltam ativos reais autorizados
+e teste de entrega. A seleção automática permanece desligada.
 
 ## Painel e execução de conversas
 
@@ -84,12 +84,34 @@ incerta de texto ou foto exige revisão, sem reenvio automático.
 
 ## Pendências de ativação
 
-- Finalizar verificação humana e criação da chave Groq, salvá-la em `GROQ_API_KEY` no
-  Render e trocar `JARVIS_REPLY_MODE=test` por `hybrid`, mantendo teste restrito primeiro.
-- Confirmar resposta interpretativa e entrega no próprio número antes de liberar público.
+- Groq e modo hybrid ativados; três respostas gratuitas foram observadas em 09/10/2026.
+  O proprietário confirmou o recebimento. Verificar com um segundo celular após
+  desativar a restrição de remetente de teste.
 - Importar CSV pelo painel; exportação Google não forneceu arquivo ao navegador automatizado.
   Números sem DDI explícito são ignorados para evitar associação errada.
 - Aguardar aprovação do modelo e definir limite de custo Meta antes de permitir retornos
   fora da janela de atendimento. Cada contato precisa de autorização registrada.
 - Cadastrar fotos reais autorizadas; depois habilitar e testar seleção pela IA.
 - O monitor gratuito de disponibilidade não garante servidor acordado nem horário dos jobs.
+
+## Atendimento humano
+
+Pedidos explícitos de atendente e palavras de urgência/resgate pausam a IA por
+contato, registram fila privada e enviam uma única confirmação. Novas mensagens
+continuam no histórico e atualizam a fila. Indisponibilidade de IA ou envio incerto
+também encaminham para revisão humana. A detecção por palavras pode exigir ajustes.
+
+No painel, abrir conversa, assumir atendimento, enviar resposta e devolver ao
+JARVIS são ações separadas. Respostas do operador ficam no histórico utilizado
+pela IA. A retomada da IA ocorre na próxima mensagem recebida. A fila atualiza a
+cada dez segundos enquanto a aba está conectada; não há notificação externa para
+Morgan nem garantia de atendimento imediato.
+
+O operador só envia após assumir e dentro de 23 horas da última mensagem do
+cliente. Cada envio possui chave de idempotência; resultado incerto exige revisão,
+sem reenvio automático. Um bloqueio por contato serializa IA, operador e executor
+na instância única atual. Múltiplas instâncias exigem bloqueio distribuído.
+
+O aplicativo Meta está publicado. A análise de permissões avançadas como provedor
+e a coexistência com o WhatsApp Business do celular são processos distintos;
+não desconectar nem reinstalar o número oficial antes de concluir esse fluxo.

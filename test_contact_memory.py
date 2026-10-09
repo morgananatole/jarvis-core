@@ -19,9 +19,26 @@ def set_field(doc, key, value):
     doc[parts[-1]] = copy.deepcopy(value)
 
 
+class Cursor:
+    def __init__(self, rows): self.rows = rows
+    def sort(self, key, direction):
+        self.rows.sort(key=lambda x: x.get(key), reverse=direction < 0)
+        return self
+    def limit(self, number): self.rows = self.rows[:number]; return self
+    async def to_list(self, number): return copy.deepcopy(self.rows[:number])
+
+
 class Collection:
     def __init__(self):
         self.docs = {}
+    def find(self, query):
+        def match(doc):
+            for key, value in query.items():
+                if isinstance(value, dict) and '$ne' in value:
+                    if doc.get(key) == value['$ne']: return False
+                elif doc.get(key) != value: return False
+            return True
+        return Cursor([doc for doc in self.docs.values() if match(doc)])
     async def create_index(self, *args, **kwargs):
         pass
     async def find_one(self, query):
@@ -50,6 +67,8 @@ class Collection:
 
 class Database:
     def __init__(self):
+        self.human_requests = Collection()
+        self.operator_jobs = Collection()
         self.delivery_receipts = Collection()
         self.contacts = Collection()
         self.contact_events = Collection()

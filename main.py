@@ -15,7 +15,9 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from openai import AsyncOpenAI
 from pymongo.errors import DuplicateKeyError, InvalidURI, ConfigurationError, OperationFailure
 from ai_router import ReplyRouter
-from contact_memory import ContactMemory
+from contact_memory import ContactMemory, contact_key
+from human_service import HumanService, conversation_lock, takeover_reason
+from ai_router import UNAVAILABLE
 from conversation_service import ConversationService, delivery_status
 from media_service import send_photo
 from crm_admin import router as crm_router, panel
@@ -215,6 +217,11 @@ def authorized_test_sender(sender):
 
 
 async def process_message(message):
+    async with conversation_lock(contact_key(message['from'])):
+        await _process_message(message)
+
+
+async def _process_message(message):
     if ((os.getenv("JARVIS_REPLY_MODE", "openai") == "test" or
             (os.getenv("JARVIS_REPLY_MODE") == "hybrid" and
              os.getenv("AI_ALLOWED_TEST_ONLY", "true") == "true"))
@@ -235,8 +242,19 @@ async def process_message(message):
     # A failed/uncertain job is held for human review, never blindly resent.
     try:
         memory = ContactMemory(inbox.database)
-        await memory.record_inbound(message["from"], message["id"], message["text"]["body"], timestamp)
-        reply = await generate_reply(message["text"]["body"], message["from"], message["id"])
+        profile = await memory.record_inbound(message["from"], message["id"], message["text"]["body"], timestamp)
+        human = HumanService(inbox.database, send_reply, authorized_test_sender)
+        reason = takeover_reason(message['text']['body'])
+        if profile.get('human_mode') or reason:
+            new = await human.request(message['from'], message['id'], reason or 'human_conversation')
+            if not new:
+                await inbox.update_one({'_id': job['_id']}, {'$set': {'state': 'human_waiting'}})
+                return
+            reply = 'Sua conversa está na fila de atendimento de Morgan. Você pode continuar por aqui; a IA ficará pausada enquanto ele atende.'
+        else:
+            reply = await generate_reply(message["text"]["body"], message["from"], message["id"])
+            if reply == UNAVAILABLE:
+                await human.request(message['from'], message['id'], 'ai_unavailable')
         await inbox.update_one({"_id": job["_id"]}, {"$set": {"state": "sending"}})
         message_id = await send_reply(message["from"], reply)
         await inbox.update_one({"_id": job["_id"]}, {"$set": {
@@ -249,6 +267,11 @@ async def process_message(message):
             await inbox.update_one({'_id': job['_id']}, {'$set': {'media_state': 'accepted', 'photo_id': photo_id}})
     except Exception:
         log.warning("Reply failed or uncertain; manual review required")
+        try:
+            await HumanService(inbox.database, send_reply, authorized_test_sender).request(
+                message['from'], message['id'], 'reply_failed_or_uncertain')
+        except Exception:
+            log.warning('Human queue unavailable; inspect inbox review_required')
         await inbox.update_one({"_id": job["_id"]}, {"$set": {"state": "review_required"}})
 
 

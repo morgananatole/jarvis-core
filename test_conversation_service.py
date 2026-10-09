@@ -43,6 +43,9 @@ class Tests(unittest.IsolatedAsyncioTestCase):
     def test_permission_and_window_and_test_scope(self):
         self.assertIsNone(gate(self.profile, self.now, lambda _: True))
         self.assertEqual(gate(self.profile, self.now, lambda _: False), 'test_recipient_only')
+        self.profile['human_mode'] = True
+        self.assertEqual(gate(self.profile, self.now, lambda _: True), 'human_takeover')
+        self.profile['human_mode'] = False
         self.profile['last_inbound_at'] -= timedelta(days=2)
         self.assertEqual(gate(self.profile, self.now, lambda _: True), 'approved_template_required')
         self.profile['do_not_contact'] = True

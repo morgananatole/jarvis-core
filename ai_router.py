@@ -156,6 +156,10 @@ class ReplyRouter:
         config['structured'] = memory is not None
         profile_context = await memory.context(sender) if memory else ''
         if memory:
+            ledger = await memory.recent_turns(sender, source_message_id)
+            if ledger:
+                turns = ledger
+        if memory:
             instructions = instructions[:2200] + (
                 '\nRetorne JSON: {"reply":"resposta ao cliente", "facts":{}}. '
                 'facts pode conter contact_name, preferred_address, patient_name, relationship, '

@@ -120,6 +120,8 @@ class ContactMemory:
         await self.db.contacts.create_index('contact_no', unique=True)
         await self.db.contact_events.create_index([('contact_key', 1), ('created_at', -1)])
         await self.db.contact_events.create_index('expires_at', expireAfterSeconds=0)
+        await self.db.human_requests.create_index([('state', 1), ('updated_at', -1)])
+        await self.db.operator_jobs.create_index('expires_at', expireAfterSeconds=0)
         await self.db.delivery_receipts.create_index('expires_at', expireAfterSeconds=0)
         await self.db.conversation_tasks.create_index([('state', 1), ('due_at', 1)])
 
@@ -184,6 +186,9 @@ class ContactMemory:
             return
         now = datetime.now(timezone.utc)
         plan = conversation_plan(profile, now)
+        if profile.get('human_mode') and plan['state'] != 'suppressed':
+            plan['state'] = 'held'
+            plan['reason'] = 'human_takeover'
         task = {**plan, 'contact_key': key, 'contact_no': profile['contact_no'],
                 'updated_at': now, 'source_message_id': message_id,
                 'requires_permission_check': True, 'requires_window_or_template': True,
@@ -204,6 +209,13 @@ class ContactMemory:
         facts = {k: v['value'] for k, v in profile.get('facts', {}).items()}
         return json.dumps({'contact_no': profile['contact_no'], 'reported_facts': facts},
                           ensure_ascii=False)[:2200]
+
+    async def recent_turns(self, phone, exclude_id):
+        rows = await self.db.contact_events.find({'contact_key': contact_key(phone),
+            '_id': {'$ne': exclude_id}}).sort('created_at', -1).limit(6).to_list(6)
+        return [{'role': 'user' if row['direction'] == 'inbound' else 'assistant',
+            'content': row.get('text', '')[:1000]} for row in reversed(rows)
+            if row.get('direction') in {'inbound', 'outbound'}]
 
     async def record_outbound(self, phone, outbound_id, text):
         profile = await self.ensure(phone)
