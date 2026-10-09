@@ -93,6 +93,8 @@ async def delivery_status(db, status):
     if not mid or value not in {'sent', 'delivered', 'read', 'failed'}:
         return
     stamp = datetime.fromtimestamp(float(status['timestamp']), timezone.utc)
+    await db.delivery_receipts.update_one({'_id': mid}, {'$set': {
+        'delivery_' + value + '_at': stamp, 'expires_at': datetime.now(timezone.utc) + timedelta(days=90)}}, upsert=True)
     # Separate timestamps preserve truth even with out-of-order Meta notifications.
     await db.contact_events.update_one({'_id': mid}, {'$set': {'delivery_' + value + '_at': stamp}})
     await db.conversation_tasks.update_one({'outbound_id': mid}, {'$set': {'delivery_' + value + '_at': stamp}})

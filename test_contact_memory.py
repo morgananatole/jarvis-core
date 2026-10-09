@@ -50,6 +50,7 @@ class Collection:
 
 class Database:
     def __init__(self):
+        self.delivery_receipts = Collection()
         self.contacts = Collection()
         self.contact_events = Collection()
         self.conversation_tasks = Collection()

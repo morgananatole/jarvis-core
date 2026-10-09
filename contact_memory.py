@@ -40,6 +40,8 @@ def unpack_reply(raw, source_text):
     try:
         data = json.loads(raw)
     except (ValueError, TypeError):
+        if isinstance(raw, str) and raw.lstrip().startswith(('{', '[')):
+            raise ValueError('invalid_structured_reply')
         return raw, {}
     if not isinstance(data, dict) or not isinstance(data.get('reply'), str):
         raise ValueError('invalid_structured_reply')
@@ -118,6 +120,7 @@ class ContactMemory:
         await self.db.contacts.create_index('contact_no', unique=True)
         await self.db.contact_events.create_index([('contact_key', 1), ('created_at', -1)])
         await self.db.contact_events.create_index('expires_at', expireAfterSeconds=0)
+        await self.db.delivery_receipts.create_index('expires_at', expireAfterSeconds=0)
         await self.db.conversation_tasks.create_index([('state', 1), ('due_at', 1)])
 
     async def ensure(self, phone):
@@ -209,3 +212,9 @@ class ContactMemory:
             'contact_key': profile['_id'], 'contact_no': profile['contact_no'],
             'direction': 'outbound', 'text': text[:4000], 'created_at': now,
             'expires_at': now + timedelta(days=90), 'delivery': 'accepted'}}, upsert=True)
+
+        receipt = await self.db.delivery_receipts.find_one({'_id': outbound_id})
+        if receipt:
+            fields = {k: v for k, v in receipt.items() if k.startswith('delivery_')}
+            if fields:
+                await self.db.contact_events.update_one({'_id': outbound_id}, {'$set': fields})

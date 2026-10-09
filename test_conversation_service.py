@@ -103,6 +103,7 @@ class Tests(unittest.IsolatedAsyncioTestCase):
 
     async def test_delivery_can_arrive_out_of_order_without_losing_read(self):
         db = type('DB', (), {})()
+        db.delivery_receipts = QueryCollection({'_id': 'out1'})
         db.contact_events = QueryCollection({'_id': 'out1'})
         db.conversation_tasks = QueryCollection({'outbound_id': 'out1'})
         for state in ['read', 'delivered', 'sent']:
