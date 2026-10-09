@@ -12,6 +12,7 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.responses import HTMLResponse
 from contact_memory import ContactMemory
 from human_service import HumanService
+from device_access import DeviceAccess
 from import_google_contacts import rows_to_contacts
 
 
@@ -25,13 +26,36 @@ def authorize(request: Request):
 
 
 def router(database, conversation):
-    api = APIRouter(prefix='/crm', dependencies=[Depends(authorize)])
+    async def access(request: Request):
+        if request.headers.get('x-jarvis-device'):
+            await DeviceAccess(db()).verify(request)
+        else:
+            authorize(request)
+    api = APIRouter(prefix='/crm', dependencies=[Depends(access)])
 
     def db():
         value = database()
         if value is None:
             raise HTTPException(503, 'Database unavailable')
         return value
+
+    @api.post('/devices/code', dependencies=[Depends(authorize)])
+    async def device_code(request: Request):
+        return await DeviceAccess(db()).issue((await request.json()).get('label'))
+
+    @api.get('/devices', dependencies=[Depends(authorize)])
+    async def devices():
+        return jsonable_encoder(await db().authorized_devices.find({}, {'public_key': 0}).limit(200).to_list(200))
+
+    @api.post('/devices/{identity}/revoke', dependencies=[Depends(authorize)])
+    async def revoke(identity: str):
+        result = await db().authorized_devices.update_one({'_id': identity}, {'$set': {'revoked': True}})
+        if not result.matched_count: raise HTTPException(404, 'device_not_found')
+        return {'revoked': True}
+
+    @api.get('/institution')
+    async def institution():
+        return jsonable_encoder(await db().institutional_knowledge.find_one({'_id': 'nova_vida'}))
 
     @api.get('/contacts')
     async def contacts(page: int = 0):
@@ -202,3 +226,17 @@ def panel():
     return HTMLResponse(Path(__file__).with_name('panel.html').read_text(encoding='utf-8'), headers={
         'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer',
         'Content-Security-Policy': "default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'"})
+
+
+def enrollment_router(database):
+    api = APIRouter()
+    @api.post('/device/enroll')
+    async def enroll(request: Request):
+        raw = await request.body()
+        if len(raw) > 2048: raise HTTPException(413, 'Payload too large')
+        value = database()
+        if value is None: raise HTTPException(503, 'Database unavailable')
+        body = await request.json()
+        if not isinstance(body, dict): raise HTTPException(400, 'Invalid enrollment')
+        return await DeviceAccess(value).enroll(body.get('code'), body.get('public_key'))
+    return api

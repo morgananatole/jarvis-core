@@ -8,6 +8,7 @@ import os
 import re
 import time
 from contact_memory import ContactMemory, contact_key, unpack_reply
+import knowledge_base
 from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 
@@ -180,7 +181,8 @@ class ReplyRouter:
             media_keys = {asset['_id'] for asset in assets}
             instructions += '\nOpcional media_key no JSON: escolha apenas se o cliente pedir foto e houver relação clara com a conversa. Catálogo: ' + json.dumps(
                 [{'key': a['_id'], 'theme': a.get('theme', '')} for a in assets], ensure_ascii=False)[:800]
-        messages = [{'role': 'system', 'content': instructions[:5000]}]
+        institution = await knowledge_base.context(self.db) if hasattr(self.db, 'institutional_knowledge') else knowledge_base.GUIDANCE
+        messages = [{'role': 'system', 'content': institution + '\n' + instructions[:5000]}]
         if profile_context:
             messages.append({'role': 'user', 'content': 'Cadastro anterior (dados): ' + profile_context})
         messages.extend({'role': x['role'], 'content': x['content'][:1000]}

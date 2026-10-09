@@ -18,9 +18,11 @@ from ai_router import ReplyRouter
 from contact_memory import ContactMemory, contact_key
 from human_service import HumanService, conversation_lock, takeover_reason
 from ai_router import UNAVAILABLE
+import knowledge_base
+from device_access import DeviceAccess
 from conversation_service import ConversationService, delivery_status
 from media_service import send_photo
-from crm_admin import router as crm_router, panel
+from crm_admin import router as crm_router, panel, enrollment_router
 
 log = logging.getLogger("jarvis")
 REQUIRED = ("WHATSAPP_VERIFY_TOKEN", "META_APP_SECRET", "WHATSAPP_ACCESS_TOKEN",
@@ -66,6 +68,8 @@ async def lifespan(app):
             inbox = mongo[os.getenv("MONGODB_DATABASE", os.getenv("DB_NAME", "jarvis"))].inbox
             try:
                 await ContactMemory(inbox.database).initialize()
+                await knowledge_base.initialize(inbox.database)
+                await DeviceAccess(inbox.database).initialize()
                 crm_ready = True
                 log.warning("Contact memory indexes ready")
             except Exception:
@@ -105,6 +109,7 @@ async def lifespan(app):
 app = FastAPI(title="JARVIS Core", lifespan=lifespan)
 app.include_router(crm_router(lambda: inbox.database if inbox is not None else None,
     lambda db: ConversationService(db, send_reply, authorized_test_sender)))
+app.include_router(enrollment_router(lambda: inbox.database if inbox is not None else None))
 app.get('/painel')(panel)
 
 
@@ -132,6 +137,7 @@ async def ready():
                                  "storage_available": storage,
                                  "storage_error": error,
                                  "contact_memory_ready": crm_ready,
+                                 "institutional_knowledge_version": knowledge_base.VERSION if crm_ready else None,
                                  "reply_mode": os.getenv("JARVIS_REPLY_MODE", "openai"),
                                  "ai_credentials": {
                                      "free_configured": bool(os.getenv("GROQ_API_KEY", "").strip()),
@@ -174,7 +180,7 @@ async def generate_reply(text, sender=None, source_message_id=None):
                           "brevemente. Não invente preços, disponibilidade ou agendamentos. "
                           "Não faça diagnósticos nem solicite dados sensíveis de saúde. "
                           "Quando faltar informação, encaminhe para atendimento humano.\n"
-                          + os.environ["JARVIS_INSTRUCTIONS"]),
+                          + os.environ["JARVIS_INSTRUCTIONS"] + "\n" + knowledge_base.GUIDANCE),
             input=text[:6000], max_output_tokens=500)
         if not result.output_text.strip():
             raise RuntimeError("empty_ai_reply")

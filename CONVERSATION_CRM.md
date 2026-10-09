@@ -115,3 +115,35 @@ na instância única atual. Múltiplas instâncias exigem bloqueio distribuído.
 O aplicativo Meta está publicado. A análise de permissões avançadas como provedor
 e a coexistência com o WhatsApp Business do celular são processos distintos;
 não desconectar nem reinstalar o número oficial antes de concluir esse fluxo.
+
+## Base institucional e dispositivos
+
+`institutional_knowledge/nova_vida` recebe a base versionada do responsável na
+inicialização. Ela é separada de perfis de pacientes e incluída igualmente na IA
+gratuita e paga, inclusive retornos. Duração de 6 meses, 4 refeições, equipe,
+estrutura, suítes, TCC, NA, Prochaska e Minnesota são informações do responsável,
+não uma certificação independente nem promessa clínica. Consultar `/crm/institution`
+exige autenticação. Descrever benefícios com "nós", respeito e dignidade, sem
+coerção, vergonha, promessa de cura ou ocultação de condições importantes.
+
+O proprietário entra com `CRM_ADMIN_TOKEN` e na aba Dispositivos gera um código
+aleatório de uso único com validade de 10 minutos. O novo navegador abre o mesmo
+painel, informa o código e gera localmente chave ECDSA P-256 privada não exportável.
+A chave fica no IndexedDB do navegador; o servidor guarda somente chave pública.
+Não compartilhar a credencial mestra. O código autoriza atendimento e acesso ao
+CRM: entregar apenas a operadores confiáveis, usando canal privado. Dispositivo
+não pode gerar códigos nem administrar outros dispositivos.
+
+Cada pedido inclui assinatura do método, caminho, corpo, timestamp, nonce e
+chave de idempotência. Repetição, alteração, assinatura inválida, timestamp fora
+de 90 segundos e dispositivo revogado são recusados. O proprietário pode revogar
+o acesso a qualquer momento. Guardar horário automático no dispositivo. Não há
+licenciamento comercial, limite de instalações, APK, autenticação biométrica ou
+garantia contra clonagem de perfis/comprometimento do navegador. Apagar dados do
+navegador exige nova autorização.
+
+A proteção operacional não impede recriação de ideias ou cópia de código público.
+Privatizar GitHub depende de autenticação de administrador no navegador; acesso
+do Render deve continuar autorizado. Cópias anteriores não são removidas. O
+monitor via Actions tem proteção para não executar em repositório privado; não
+ativar runners pagos para contornar isso sem autorização.
