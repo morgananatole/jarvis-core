@@ -12,6 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import HTMLResponse
 from contact_memory import ContactMemory
+from relationship_memory import review as review_relationship
 from human_service import HumanService
 from device_access import DeviceAccess
 from commercial_licenses import Licenses, business
@@ -198,6 +199,18 @@ def router(database, conversation):
             raise HTTPException(404, 'Contact not found')
         events = await db().contact_events.find({'contact_key': profile['_id']}).sort('created_at', -1).limit(30).to_list(30)
         return jsonable_encoder({'profile': profile, 'events': events})
+
+    @api.post('/contacts/{number}/relationship')
+    async def relationship_review(number: int, request: Request):
+        body = await request.json()
+        if not isinstance(body, dict) or body.get('action') not in {'resolve', 'clear'}:
+            raise HTTPException(400, 'invalid_relationship_action')
+        try:
+            return await review_relationship(db(), number, body['action'], actor(request))
+        except ValueError as error:
+            code = {'owner_only': 403, 'contact_not_found': 404,
+                    'no_open_relationship_issue': 409, 'relationship_changed_reload': 409}.get(str(error), 400)
+            raise HTTPException(code, str(error)) from None
 
     @api.post('/tasks/{number}/review')
     async def review(number: int, request: Request):
