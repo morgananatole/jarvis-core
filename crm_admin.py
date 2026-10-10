@@ -1,5 +1,6 @@
 """Private CRM API. All customer data requires a bearer credential."""
 import base64
+import asyncio
 import csv
 import httpx
 import hmac
@@ -14,6 +15,7 @@ from contact_memory import ContactMemory
 from human_service import HumanService
 from device_access import DeviceAccess
 from commercial_licenses import Licenses, business
+from peripheral import Peripheral, inventory, DECISION
 from import_google_contacts import rows_to_contacts
 from business_intake import BusinessIntake, tenant
 
@@ -51,7 +53,9 @@ def router(database, conversation):
             raise HTTPException(413, 'intake_file_too_large')
         try:
             body = await request.json()
-            result = await BusinessIntake(db()).analyze(body, request.headers.get('idempotency-key'), actor(request))
+            result, _ = await asyncio.gather(
+                BusinessIntake(db()).analyze(body, request.headers.get('idempotency-key'), actor(request)),
+                Peripheral(db()).observe(body, request.headers.get('idempotency-key')))
             return jsonable_encoder(result)
         except ValueError as error:
             raise HTTPException(409 if str(error) in {'intake_busy', 'idempotency_conflict'} else 400, str(error))
@@ -122,6 +126,15 @@ def router(database, conversation):
             await Licenses(db()).release(device['license_id'], identity)
         if not result.matched_count: raise HTTPException(404, 'device_not_found')
         return {'revoked': True}
+
+    @api.get('/peripheral', dependencies=[Depends(authorize)])
+    async def peripheral_state():
+        await Peripheral(db()).decision()
+        return jsonable_encoder({'decision': DECISION, 'capabilities': inventory(), 'runs': await db().peripheral_runs.find({'business_id': tenant()}).sort('created_at', -1).limit(30).to_list(30)})
+
+    @api.post('/peripheral/simulate', dependencies=[Depends(authorize)])
+    async def peripheral_simulate(request: Request):
+        return jsonable_encoder(await Peripheral(db()).simulate(await request.json()))
 
     @api.post('/licenses', dependencies=[Depends(authorize)])
     async def license_issue(request: Request):
