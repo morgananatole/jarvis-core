@@ -16,6 +16,7 @@ from human_service import HumanService
 from device_access import DeviceAccess
 from commercial_licenses import Licenses, business
 from peripheral import Peripheral, inventory, DECISION
+from business_profile import BusinessProfile
 from import_google_contacts import rows_to_contacts
 from business_intake import BusinessIntake, tenant
 
@@ -126,6 +127,19 @@ def router(database, conversation):
             await Licenses(db()).release(device['license_id'], identity)
         if not result.matched_count: raise HTTPException(404, 'device_not_found')
         return {'revoked': True}
+
+    @api.get('/business-profile')
+    async def business_profile():
+        return jsonable_encoder({'active': await db().business_profiles.find_one({'_id': tenant()}),
+            'proposals': await db().business_profile_proposals.find({'business_id': tenant(), 'state': 'pending'}).sort('created_at', -1).limit(20).to_list(20)})
+
+    @api.post('/business-profile/proposals')
+    async def business_profile_propose(request: Request):
+        return jsonable_encoder(await BusinessProfile(db()).propose(await request.json(), actor(request)))
+
+    @api.post('/business-profile/proposals/{identity}/approve', dependencies=[Depends(authorize)])
+    async def business_profile_approve(identity: str):
+        return await BusinessProfile(db()).approve(identity)
 
     @api.get('/peripheral', dependencies=[Depends(authorize)])
     async def peripheral_state():
