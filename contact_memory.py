@@ -8,6 +8,7 @@ import unicodedata
 from datetime import datetime, timedelta, timezone
 
 from pymongo.errors import DuplicateKeyError
+from relationship_memory import update_relation, context as relationship_context
 
 FIELDS = {'contact_name', 'preferred_address', 'patient_name', 'relationship',
           'patient_age', 'city', 'substances', 'treatment_willingness',
@@ -95,6 +96,8 @@ def conversation_plan(profile, now):
             reasons.append(signal)
     if values.get('lifecycle') in ('enrolled', 'postcare'):
         delay, purpose = 30 * 86400, 'Retomar vínculo e verificar como está o acompanhamento'
+    elif profile.get('relationship', {}).get('issue_open'):
+        delay, purpose = 86400, 'Acompanhar dificuldade relatada e oferecer encaminhamento humano'
     elif priority >= 50:
         delay, purpose = 6 * 3600, 'Retomar decisão e esclarecer a pendência de atendimento'
     elif priority >= 20:
@@ -164,8 +167,12 @@ class ContactMemory:
         # Immediate opt-out suppression, including while AI is unavailable.
         if lower.strip() in {'parar', 'sair', 'não quero mais', 'nao quero mais'} or re.search(r'\b(não me mande|nao me mande|não me envie|nao me envie|não quero receber|nao quero receber|pare de enviar|remova meu contato)\b', lower):
             signals['do_not_contact'] = True
+        at = datetime.fromtimestamp(timestamp, timezone.utc)
+        relational = update_relation(profile, message_id, text, at)
+        if relational:
+            signals['relationship'] = relational
         await self.db.contacts.update_one({'_id': key}, {
-            '$set': {'last_inbound_at': datetime.fromtimestamp(timestamp, timezone.utc), **signals},
+            '$set': {'last_inbound_at': at, **signals},
             '$inc': {'inbound_count': 1}})
         await self.plan(key, message_id)
         return await self.db.contacts.find_one({'_id': key})
@@ -206,9 +213,11 @@ class ContactMemory:
         profile = await self.db.contacts.find_one({'_id': contact_key(phone)})
         if not profile:
             return ''
-        facts = {k: v['value'] for k, v in profile.get('facts', {}).items()}
-        return json.dumps({'contact_no': profile['contact_no'], 'reported_facts': facts},
-                          ensure_ascii=False)[:2200]
+        facts = {k: str(v.get('value', ''))[:140]
+                 for k, v in list(profile.get('facts', {}).items())[:15] if isinstance(v, dict)}
+        return json.dumps({'contact_no': profile['contact_no'],
+                           'relationship': relationship_context(profile),
+                           'reported_facts': facts}, ensure_ascii=False)[:3500]
 
     async def recent_turns(self, phone, exclude_id):
         rows = await self.db.contact_events.find({'contact_key': contact_key(phone),

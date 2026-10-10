@@ -34,3 +34,7 @@ Este módulo não gera código, concede permissões, cria tokens, envia mensagen
 ## Evidência da integração atual
 
 Em 09/10/2026, o acesso Desenvolver app foi aplicado ao usuário jarvisnovavida2026 no app 1585460142806819. Após atualização do painel, as permissões WhatsApp ficaram disponíveis e um token de 60 dias foi criado. O Render recebeu o token e o Phone Number ID oficial 1372243162639360 em modo test. A resposta ponta a ponta permanece dependente de verificação real; concessão de permissão e criação de token não comprovam entrega.
+
+## Regra obrigatória para novos aplicativos e automações
+
+O padrão de interação `docs/REGRA_INTUITIVIDADE_PULSE_1-3-0.md` integra a metodologia de desenvolvimento: uma ação principal clara, até três interações para uma tarefa comum e zero erros sem um caminho seguro. A cada mudança, testar cenários vazios, falhas de rede, ações repetidas, acessibilidade móvel, permissões e resultado verificado. Funcionalidade que não cumprir esse contrato deve permanecer marcada como pendente; não publicar apenas por passar no build. O objetivo é um produto útil, intuitivo e auditável, não uma demonstração de botões.
