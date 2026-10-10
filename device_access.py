@@ -29,16 +29,19 @@ class DeviceAccess:
         await self.db.device_codes.create_index('expires_at', expireAfterSeconds=0)
         await self.db.device_nonces.create_index('expires_at', expireAfterSeconds=0)
 
-    async def issue(self, label):
+    async def issue(self, label, license_id=None):
         if not isinstance(label, str) or not label.strip() or len(label) > 80:
             raise HTTPException(400, 'invalid_device_name')
+        if license_id is not None:
+            from commercial_licenses import Licenses
+            await Licenses(self.db).active(license_id)
         code = secrets.token_urlsafe(32)
         now = datetime.now(timezone.utc)
         await self.db.device_codes.insert_one({'_id': digest(code), 'label': label.strip(),
-            'created_at': now, 'expires_at': now + timedelta(minutes=10), 'used': False})
+            'created_at': now, 'expires_at': now + timedelta(minutes=10), 'used': False, 'license_id': license_id})
         return {'code': code, 'expires_in_seconds': 600}
 
-    async def enroll(self, code, jwk):
+    async def enroll(self, code, jwk, license_key=None):
         try: public_key(jwk)
         except (ValueError, KeyError, TypeError): raise HTTPException(400, 'invalid_public_key')
         if not isinstance(code, str) or not 40 <= len(code) <= 60:
@@ -48,9 +51,17 @@ class DeviceAccess:
             'used': False, 'expires_at': {'$gt': now}}, {'$set': {'used': True}}, return_document=True)
         if not record: raise HTTPException(401, 'invalid_or_used_code')
         identity = secrets.token_hex(16)
-        await self.db.authorized_devices.insert_one({'_id': identity, 'label': record['label'],
-            'public_key': {k: jwk[k] for k in ('kty', 'crv', 'x', 'y')},
-            'created_at': now, 'revoked': False})
+        license_id = record.get('license_id')
+        if license_id:
+            from commercial_licenses import Licenses
+            await Licenses(self.db).reserve(license_id, license_key, identity)
+        try:
+            await self.db.authorized_devices.insert_one({'_id': identity, 'label': record['label'],
+                'public_key': {k: jwk[k] for k in ('kty', 'crv', 'x', 'y')},
+                'created_at': now, 'revoked': False, 'license_id': license_id})
+        except Exception:
+            if license_id: await Licenses(self.db).release(license_id, identity)
+            raise
         return {'device_id': identity}
 
     async def verify(self, request):
@@ -76,4 +87,8 @@ class DeviceAccess:
                 'expires_at': datetime.now(timezone.utc) + timedelta(minutes=5)})
         except (ValueError, TypeError, KeyError, InvalidSignature, DuplicateKeyError):
             raise HTTPException(401, 'device_authentication_failed') from None
+        if device.get('license_id'):
+            from commercial_licenses import Licenses
+            license = await Licenses(self.db).active(device['license_id'])
+            if identity not in license['devices']: raise HTTPException(403, 'license_device_not_authorized')
         return identity

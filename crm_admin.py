@@ -13,6 +13,7 @@ from fastapi.responses import HTMLResponse
 from contact_memory import ContactMemory
 from human_service import HumanService
 from device_access import DeviceAccess
+from commercial_licenses import Licenses, business
 from import_google_contacts import rows_to_contacts
 from business_intake import BusinessIntake, tenant
 
@@ -106,7 +107,8 @@ def router(database, conversation):
 
     @api.post('/devices/code', dependencies=[Depends(authorize)])
     async def device_code(request: Request):
-        return await DeviceAccess(db()).issue((await request.json()).get('label'))
+        body = await request.json()
+        return await DeviceAccess(db()).issue(body.get('label'), body.get('license_id') or None)
 
     @api.get('/devices', dependencies=[Depends(authorize)])
     async def devices():
@@ -114,8 +116,29 @@ def router(database, conversation):
 
     @api.post('/devices/{identity}/revoke', dependencies=[Depends(authorize)])
     async def revoke(identity: str):
+        device = await db().authorized_devices.find_one({'_id': identity})
         result = await db().authorized_devices.update_one({'_id': identity}, {'$set': {'revoked': True}})
+        if device and device.get('license_id'):
+            await Licenses(db()).release(device['license_id'], identity)
         if not result.matched_count: raise HTTPException(404, 'device_not_found')
+        return {'revoked': True}
+
+    @api.post('/licenses', dependencies=[Depends(authorize)])
+    async def license_issue(request: Request):
+        return jsonable_encoder(await Licenses(db()).issue(await request.json()))
+
+    @api.get('/licenses', dependencies=[Depends(authorize)])
+    async def license_list():
+        return jsonable_encoder(await db().commercial_licenses.find({'business_id': business()}, {'key_hash': 0}).limit(200).to_list(200))
+
+    @api.post('/licenses/{identity}/renew', dependencies=[Depends(authorize)])
+    async def license_renew(identity: str, request: Request):
+        return jsonable_encoder(await Licenses(db()).renew(identity, await request.json()))
+
+    @api.post('/licenses/{identity}/revoke', dependencies=[Depends(authorize)])
+    async def license_revoke(identity: str):
+        result = await db().commercial_licenses.update_one({'_id': identity, 'business_id': business()}, {'$set': {'revoked': True, 'revoked_at': datetime.now(timezone.utc)}})
+        if not result.matched_count: raise HTTPException(404, 'license_not_found')
         return {'revoked': True}
 
     @api.get('/institution')
@@ -303,5 +326,5 @@ def enrollment_router(database):
         if value is None: raise HTTPException(503, 'Database unavailable')
         body = await request.json()
         if not isinstance(body, dict): raise HTTPException(400, 'Invalid enrollment')
-        return await DeviceAccess(value).enroll(body.get('code'), body.get('public_key'))
+        return await DeviceAccess(value).enroll(body.get('code'), body.get('public_key'), body.get('license_key'))
     return api
