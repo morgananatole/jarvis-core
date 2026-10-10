@@ -117,3 +117,28 @@ def context(profile, now=None):
             any(item["kind"] == "complaint" for item in moments)),
         "guidance": "Use apenas relatos comprovados, sem inventar afeto, culpa ou solucao.",
     }
+
+async def review(db, number, action, actor):
+    """Operator decision; no messaging side effect. Preserve who verified it."""
+    if action not in ("resolve", "clear"):
+        raise ValueError("invalid_relationship_action")
+    profile = await db.contacts.find_one({"contact_no": number})
+    if not profile:
+        raise ValueError("contact_not_found")
+    if action == "clear":
+        if actor != "owner":
+            raise ValueError("owner_only")
+        await db.contacts.update_one({"_id": profile["_id"]},
+                                     {"$unset": {"relationship": ""}})
+        return {"action": "cleared", "reviewed": True}
+
+    if not (profile.get("relationship") or {}).get("issue_open"):
+        raise ValueError("no_open_relationship_issue")
+    result = await db.contacts.update_one(
+        {"_id": profile["_id"], "relationship.issue_open": True},
+        {"$set": {"relationship.issue_open": False,
+                  "relationship.reviewed_by": actor,
+                  "relationship.reviewed_at": datetime.now(timezone.utc)}})
+    if not result.matched_count:
+        raise ValueError("relationship_changed_reload")
+    return {"action": "resolved", "reviewed": True}
