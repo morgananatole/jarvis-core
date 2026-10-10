@@ -64,7 +64,7 @@ class DeviceAccess:
             raise
         return {'device_id': identity}
 
-    async def verify(self, request):
+    async def verify(self, request, allow_expired=False):
         identity = request.headers.get('x-jarvis-device', '')
         stamp = request.headers.get('x-jarvis-time', '')
         nonce = request.headers.get('x-jarvis-nonce', '')
@@ -89,6 +89,6 @@ class DeviceAccess:
             raise HTTPException(401, 'device_authentication_failed') from None
         if device.get('license_id'):
             from commercial_licenses import Licenses
-            license = await Licenses(self.db).active(device['license_id'])
+            license = await Licenses(self.db).active(device['license_id'], allow_expired=allow_expired)
             if identity not in license['devices']: raise HTTPException(403, 'license_device_not_authorized')
         return identity
