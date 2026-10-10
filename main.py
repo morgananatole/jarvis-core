@@ -104,6 +104,23 @@ async def lifespan(app):
             await asyncio.sleep(60)
     if inbox is not None:
         worker = asyncio.create_task(run_conversations())
+    billing_worker = None
+    async def run_billing():
+        from pix_billing import PixBilling
+        while True:
+            try:
+                if inbox is not None: await PixBilling(inbox.database).recover()
+            except Exception:
+                log.warning('Payment reconciliation deferred')
+            await asyncio.sleep(60)
+    from pix_billing import configured as billing_configured
+    if inbox is not None and billing_configured():
+        try:
+            await inbox.database.billing_orders.create_index('payment_id', unique=True,
+                partialFilterExpression={'payment_id': {'$type': 'string'}})
+        except Exception:
+            log.warning('Payment index setup deferred')
+        billing_worker = asyncio.create_task(run_billing())
     try:
         yield
     finally:
@@ -111,6 +128,12 @@ async def lifespan(app):
             worker.cancel()
             try:
                 await worker
+            except asyncio.CancelledError:
+                pass
+        if billing_worker is not None:
+            billing_worker.cancel()
+            try:
+                await billing_worker
             except asyncio.CancelledError:
                 pass
         if mongo is not None:
@@ -122,6 +145,8 @@ app = FastAPI(title="JARVIS Core", lifespan=lifespan)
 app.include_router(crm_router(lambda: inbox.database if inbox is not None else None,
     lambda db: ConversationService(db, send_reply, authorized_test_sender)))
 app.include_router(enrollment_router(lambda: inbox.database if inbox is not None else None))
+from pix_billing import billing_router
+app.include_router(billing_router(lambda: inbox.database if inbox is not None else None))
 app.get('/painel')(panel)
 
 @app.get('/app.webmanifest')

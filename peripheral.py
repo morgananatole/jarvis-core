@@ -32,8 +32,8 @@ CAPABILITIES = [
     {'id':'external_evidence', 'name':'Evidência externa revisada', 'status':'implemented_allowlist', 'paths':[],
      'variables':['EXTERNAL_EVIDENCE_ENABLED'],
      'next':'Conferir fonte, data e pertinência da evidência na resposta comercial.'},
-    {'id':'billing', 'name':'Pagamento recorrente automático', 'status':'planned', 'paths':[], 'variables':[],
-     'next':'Conectar gateway com webhook autenticado e proteção contra repetição; não existe cobrança automática nesta versão.'},
+    {'id':'billing', 'name':'Renovação de assinatura por Pix', 'status':'implemented_needs_provider_connection', 'paths':['/billing/account','/billing/checkout','/billing/check'], 'variables':['MP_ACCESS_TOKEN','MP_WEBHOOK_SECRET','MP_COLLECTOR_ID','BILLING_PUBLIC_BASE_URL'],
+     'next':'Conectar a conta recebedora e testar Pix real, confirmação e renovação. Cada período ainda exige pagamento pelo cliente.'},
 ]
 
 

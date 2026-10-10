@@ -39,12 +39,12 @@ class Licenses:
         return {'license_id': identity, 'activation_key': key, 'kind': kind, 'expires_at': expires,
             'max_devices': seats, 'note': 'Save this key now; it is displayed once.'}
 
-    async def active(self, identity):
+    async def active(self, identity, allow_expired=False):
         if not isinstance(identity, str) or not re.fullmatch(r'[0-9a-f]{32}', identity):
             raise HTTPException(400, 'invalid_license_id')
         record = await self.db.commercial_licenses.find_one({'_id': identity, 'business_id': business(), 'revoked': False})
         if not record: raise HTTPException(403, 'license_revoked_or_missing')
-        if record['kind'] == 'subscription' and record['expires_at'] <= datetime.now(timezone.utc):
+        if not allow_expired and record['kind'] == 'subscription' and record['expires_at'] <= datetime.now(timezone.utc):
             raise HTTPException(403, 'license_expired')
         return record
 

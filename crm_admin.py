@@ -17,6 +17,7 @@ from device_access import DeviceAccess
 from commercial_licenses import Licenses, business
 from peripheral import Peripheral, inventory, DECISION
 from business_profile import BusinessProfile
+from pix_billing import PixBilling
 from import_google_contacts import rows_to_contacts
 from business_intake import BusinessIntake, tenant
 
@@ -154,6 +155,10 @@ def router(database, conversation):
     async def license_issue(request: Request):
         return jsonable_encoder(await Licenses(db()).issue(await request.json()))
 
+    @api.post('/licenses/{identity}/billing', dependencies=[Depends(authorize)])
+    async def license_price(identity: str, request: Request):
+        return await PixBilling(db()).price(identity, await request.json())
+
     @api.get('/licenses', dependencies=[Depends(authorize)])
     async def license_list():
         return jsonable_encoder(await db().commercial_licenses.find({'business_id': business()}, {'key_hash': 0}).limit(200).to_list(200))
@@ -167,6 +172,11 @@ def router(database, conversation):
         result = await db().commercial_licenses.update_one({'_id': identity, 'business_id': business()}, {'$set': {'revoked': True, 'revoked_at': datetime.now(timezone.utc)}})
         if not result.matched_count: raise HTTPException(404, 'license_not_found')
         return {'revoked': True}
+
+    @api.get('/whatsapp/connection', dependencies=[Depends(authorize)])
+    async def whatsapp_connection():
+        from whatsapp_connection import diagnostic
+        return await diagnostic()
 
     @api.get('/institution')
     async def institution():
