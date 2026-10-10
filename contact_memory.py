@@ -162,7 +162,7 @@ class ContactMemory:
                     continue
                 signals['signals.' + kind] = True
         # Immediate opt-out suppression, including while AI is unavailable.
-        if lower.strip() == 'parar' or re.search(r'\b(não me mande|nao me mande|não me envie|nao me envie|não quero receber|nao quero receber|pare de enviar|remova meu contato)\b', lower):
+        if lower.strip() in {'parar', 'sair', 'não quero mais', 'nao quero mais'} or re.search(r'\b(não me mande|nao me mande|não me envie|nao me envie|não quero receber|nao quero receber|pare de enviar|remova meu contato)\b', lower):
             signals['do_not_contact'] = True
         await self.db.contacts.update_one({'_id': key}, {
             '$set': {'last_inbound_at': datetime.fromtimestamp(timestamp, timezone.utc), **signals},
