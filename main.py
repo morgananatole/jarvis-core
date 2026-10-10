@@ -6,11 +6,15 @@ import json
 import logging
 import os
 import time
+import uuid
+from datetime import datetime, timedelta, timezone
 from contextlib import asynccontextmanager
 
 import httpx
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, PlainTextResponse
+from fastapi.responses import FileResponse, Response
+from pathlib import Path
 from motor.motor_asyncio import AsyncIOMotorClient
 from openai import AsyncOpenAI
 from pymongo.errors import DuplicateKeyError, InvalidURI, ConfigurationError, OperationFailure
@@ -19,6 +23,7 @@ from contact_memory import ContactMemory, contact_key
 from human_service import HumanService, conversation_lock, takeover_reason
 from ai_router import UNAVAILABLE
 import knowledge_base
+import sales_policy
 from device_access import DeviceAccess
 from conversation_service import ConversationService, delivery_status
 from media_service import send_photo
@@ -64,12 +69,14 @@ async def lifespan(app):
     crm_ready = False
     if os.getenv("MONGODB_URI"):
         try:
-            mongo = AsyncIOMotorClient(os.environ["MONGODB_URI"], serverSelectionTimeoutMS=3000)
+            mongo = AsyncIOMotorClient(os.environ["MONGODB_URI"], serverSelectionTimeoutMS=3000, tz_aware=True)
             inbox = mongo[os.getenv("MONGODB_DATABASE", os.getenv("DB_NAME", "jarvis"))].inbox
             try:
                 await ContactMemory(inbox.database).initialize()
                 await knowledge_base.initialize(inbox.database)
                 await DeviceAccess(inbox.database).initialize()
+                await inbox.database.business_documents.create_index([('business_id', 1), ('created_at', -1)])
+                await inbox.database.business_entities.create_index([('business_id', 1), ('contact_key', 1)])
                 crm_ready = True
                 log.warning("Contact memory indexes ready")
             except Exception:
@@ -83,8 +90,12 @@ async def lifespan(app):
     async def run_conversations():
         while True:
             try:
+                if inbox is not None:
+                    from recovery import recover
+                    await recover(inbox.database, process_message)
                 if os.getenv('CONVERSATION_EXECUTOR_ENABLED', 'false') == 'true' and inbox is not None:
-                    tasks = await inbox.database.conversation_tasks.find({'state': 'approved'}).limit(10).to_list(10)
+                    from datetime import datetime, timezone
+                    tasks = await inbox.database.conversation_tasks.find({'state': 'approved', 'due_at': {'$lte': datetime.now(timezone.utc)}}).sort('due_at', 1).limit(10).to_list(10)
                     for task in tasks:
                         await ConversationService(inbox.database, send_reply, authorized_test_sender).run_one(task['_id'])
             except Exception:
@@ -112,6 +123,24 @@ app.include_router(crm_router(lambda: inbox.database if inbox is not None else N
 app.include_router(enrollment_router(lambda: inbox.database if inbox is not None else None))
 app.get('/painel')(panel)
 
+@app.get('/app.webmanifest')
+async def manifest():
+    return JSONResponse({'name': 'JARVIS PULSE', 'short_name': 'PULSE', 'start_url': '/painel',
+        'scope': '/', 'display': 'standalone', 'background_color': '#eef4f3', 'theme_color': '#123d39',
+        'icons': [{'src': '/app-icon/' + str(size), 'sizes': str(size) + 'x' + str(size), 'type': 'image/png'} for size in (192, 512)]},
+        media_type='application/manifest+json')
+
+@app.get('/app-icon/{size}')
+async def app_icon(size: int):
+    if size not in (192, 512): raise HTTPException(404, 'Icon not found')
+    return FileResponse(Path(__file__).with_name('app_icon_' + str(size) + '.png'), media_type='image/png')
+
+@app.get('/app-sw.js')
+async def service_worker():
+    # No fetch interception or caching of private API responses.
+    return Response("self.addEventListener('install', () => self.skipWaiting()); self.addEventListener('activate', event => event.waitUntil(self.clients.claim()));",
+        media_type='application/javascript', headers={'Cache-Control': 'no-cache'})
+
 
 @app.get("/")
 @app.get("/health")
@@ -132,7 +161,7 @@ async def ready():
             error = "authentication_or_permission_failed"
         except Exception:
             error = "database_unreachable"
-    return JSONResponse(status_code=200 if not absent and storage else 503,
+    return JSONResponse(status_code=200 if not absent and storage and crm_ready else 503,
                         content={"configured": not absent, "missing": absent,
                                  "storage_available": storage,
                                  "storage_error": error,
@@ -180,7 +209,7 @@ async def generate_reply(text, sender=None, source_message_id=None):
                           "brevemente. Não invente preços, disponibilidade ou agendamentos. "
                           "Não faça diagnósticos nem solicite dados sensíveis de saúde. "
                           "Quando faltar informação, encaminhe para atendimento humano.\n"
-                          + os.environ["JARVIS_INSTRUCTIONS"] + "\n" + knowledge_base.GUIDANCE),
+                          + os.environ["JARVIS_INSTRUCTIONS"] + "\n" + knowledge_base.GUIDANCE + "\n" + sales_policy.GUIDANCE),
             input=text[:6000], max_output_tokens=500)
         if not result.output_text.strip():
             raise RuntimeError("empty_ai_reply")
@@ -239,12 +268,17 @@ async def _process_message(message):
     timestamp = float(message["timestamp"])
     if timestamp < time.time() - 23 * 3600 or timestamp > time.time() + 300:
         return
-    job = {"_id": message["id"], "state": "processing",
-           "received_at": timestamp}
+    attempt = uuid.uuid4().hex
+    now = datetime.now(timezone.utc)
+    job = {"_id": message["id"], "state": "processing", "message": message,
+           "attempt": attempt, "lease_until": now + timedelta(minutes=3), "received_at": timestamp}
+    guard = {"_id": job["_id"], "attempt": attempt}
     try:
         await inbox.insert_one(job)
     except DuplicateKeyError:
-        return
+        claimed = await inbox.find_one_and_update({'_id': job['_id'], 'state': 'processing',
+            'lease_until': {'$lt': now}}, {'$set': {'attempt': attempt, 'lease_until': now + timedelta(minutes=3)}}, return_document=True)
+        if not claimed: return
     # A failed/uncertain job is held for human review, never blindly resent.
     try:
         memory = ContactMemory(inbox.database)
@@ -254,23 +288,25 @@ async def _process_message(message):
         if profile.get('human_mode') or reason:
             new = await human.request(message['from'], message['id'], reason or 'human_conversation')
             if not new:
-                await inbox.update_one({'_id': job['_id']}, {'$set': {'state': 'human_waiting'}})
+                await inbox.update_one(guard, {'$set': {'state': 'human_waiting'}})
                 return
             reply = 'Sua conversa está na fila de atendimento de Morgan. Você pode continuar por aqui; a IA ficará pausada enquanto ele atende.'
         else:
             reply = await generate_reply(message["text"]["body"], message["from"], message["id"])
             if reply == UNAVAILABLE:
                 await human.request(message['from'], message['id'], 'ai_unavailable')
-        await inbox.update_one({"_id": job["_id"]}, {"$set": {"state": "sending"}})
+        claimed = await inbox.find_one_and_update({**guard, 'state': 'processing'},
+            {'$set': {'state': 'sending', 'lease_until': datetime.now(timezone.utc) + timedelta(minutes=3)}}, return_document=True)
+        if not claimed: return
         message_id = await send_reply(message["from"], reply)
-        await inbox.update_one({"_id": job["_id"]}, {"$set": {
+        await inbox.update_one(guard, {"$set": {
             "state": "sent", "outbound_id": message_id}})
         await memory.record_outbound(message["from"], message_id, reply)
         job_state = await inbox.find_one({'_id': job['_id']})
         if job_state.get('media_key'):
-            await inbox.update_one({'_id': job['_id']}, {'$set': {'media_state': 'sending'}})
+            await inbox.update_one(guard, {'$set': {'media_state': 'sending'}})
             photo_id = await send_photo(inbox.database, message['from'], job_state['media_key'])
-            await inbox.update_one({'_id': job['_id']}, {'$set': {'media_state': 'accepted', 'photo_id': photo_id}})
+            await inbox.update_one(guard, {'$set': {'media_state': 'accepted', 'photo_id': photo_id}})
     except Exception:
         log.warning("Reply failed or uncertain; manual review required")
         try:
@@ -278,7 +314,7 @@ async def _process_message(message):
                 message['from'], message['id'], 'reply_failed_or_uncertain')
         except Exception:
             log.warning('Human queue unavailable; inspect inbox review_required')
-        await inbox.update_one({"_id": job["_id"]}, {"$set": {"state": "review_required"}})
+        await inbox.update_one(guard, {"$set": {"state": "review_required"}})
 
 
 @app.post("/webhook")

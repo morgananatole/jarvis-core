@@ -14,6 +14,7 @@ from contact_memory import ContactMemory
 from human_service import HumanService
 from device_access import DeviceAccess
 from import_google_contacts import rows_to_contacts
+from business_intake import BusinessIntake, tenant
 
 
 def authorize(request: Request):
@@ -38,6 +39,70 @@ def router(database, conversation):
         if value is None:
             raise HTTPException(503, 'Database unavailable')
         return value
+
+    def actor(request):
+        return 'device:' + request.headers['x-jarvis-device'] if request.headers.get('x-jarvis-device') else 'owner'
+
+    @api.post('/intake')
+    async def intake(request: Request):
+        raw = await request.body()
+        if len(raw) > 8 * 1024 * 1024:
+            raise HTTPException(413, 'intake_file_too_large')
+        try:
+            body = await request.json()
+            result = await BusinessIntake(db()).analyze(body, request.headers.get('idempotency-key'), actor(request))
+            return jsonable_encoder(result)
+        except ValueError as error:
+            raise HTTPException(409 if str(error) in {'intake_busy', 'idempotency_conflict'} else 400, str(error))
+
+    @api.get('/intake')
+    async def intake_list():
+        rows = await db().business_documents.find({'business_id': tenant()},
+            {'original': 0, 'text': 0, 'extracted_text': 0, 'actor': 0}).sort('created_at', -1).limit(50).to_list(50)
+        return jsonable_encoder(rows)
+
+    @api.post('/intake/{identity}/apply')
+    async def intake_apply(identity: str, request: Request):
+        try:
+            return jsonable_encoder(await BusinessIntake(db()).apply(identity, actor(request)))
+        except ValueError as error:
+            raise HTTPException(409, str(error))
+
+    @api.post('/intake/{identity}/date')
+    async def intake_date(identity: str, request: Request):
+        body = await request.json()
+        if not isinstance(body, dict): raise HTTPException(400, 'invalid_intake_item')
+        try:
+            return jsonable_encoder(await BusinessIntake(db()).review_date(identity, body.get('index'), body.get('due_at'), body.get('phone'), actor(request), body.get('purpose')))
+        except ValueError as error:
+            raise HTTPException(409, str(error))
+
+    @api.get('/business/events')
+    async def business_events():
+        return jsonable_encoder(await db().business_entities.find({'business_id': tenant()}).sort('created_at', -1).limit(200).to_list(200))
+
+    @api.post('/task-actions/{identity}/review')
+    async def task_review(identity: str, request: Request):
+        body = await request.json()
+        if not isinstance(body, dict) or body.get('state') not in {'approved', 'held'}:
+            raise HTTPException(400, 'Choose approved or held')
+        changes = {'state': body['state'], 'reviewed_at': datetime.now(timezone.utc), 'reviewed_by': actor(request)}
+        if body.get('due_at'):
+            try:
+                due = datetime.fromisoformat(body['due_at'])
+                if due.tzinfo is None: raise ValueError()
+                changes['due_at'] = due
+            except (ValueError, TypeError): raise HTTPException(400, 'due_at requires ISO 8601 timezone')
+        if body.get('purpose'):
+            if not isinstance(body['purpose'], str): raise HTTPException(400, 'invalid purpose')
+            changes['purpose'] = body['purpose'][:500]
+        result = await db().conversation_tasks.update_one({'_id': identity, 'state': {'$in': ['planned', 'held', 'blocked', 'approved']}}, {'$set': changes})
+        if not result.matched_count: raise HTTPException(409, 'Task unavailable or already processing')
+        return {'reviewed': True}
+
+    @api.post('/task-actions/{identity}/run')
+    async def task_run(identity: str):
+        return await conversation(db()).run_one(identity)
 
     @api.post('/devices/code', dependencies=[Depends(authorize)])
     async def device_code(request: Request):

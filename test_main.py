@@ -10,11 +10,13 @@ from unittest.mock import AsyncMock, patch
 from fastapi.testclient import TestClient
 from pymongo.errors import DuplicateKeyError
 import main
+from test_contact_memory import Database
 
 
 class Inbox:
     def __init__(self):
         self.jobs = {}
+        self.database = Database()
 
     async def insert_one(self, job):
         if job['_id'] in self.jobs:
@@ -23,6 +25,19 @@ class Inbox:
 
     async def update_one(self, query, update):
         self.jobs[query['_id']].update(update['$set'])
+
+    async def find_one(self, query):
+        return self.jobs.get(query['_id'])
+
+    async def find_one_and_update(self, query, update, **kwargs):
+        job = self.jobs.get(query['_id'])
+        if not job: return None
+        for key, value in query.items():
+            if isinstance(value, dict) and '$lt' in value:
+                if job.get(key) is None or not job[key] < value['$lt']: return None
+            elif job.get(key) != value: return None
+        job.update(update['$set'])
+        return dict(job)
 
 
 class WebhookTests(unittest.TestCase):
@@ -54,7 +69,7 @@ class WebhookTests(unittest.TestCase):
     def payload(self, phone='test-value', kind='text', timestamp=None):
         return {'entry': [{'changes': [{'value': {
             'metadata': {'phone_number_id': phone},
-            'messages': [{'id': 'inbound-test-id', 'from': 'authorized-test-sender',
+            'messages': [{'id': 'inbound-test-id', 'from': '5584981584252',
                           'timestamp': str(timestamp or time.time()),
                           'type': kind, 'text': {'body': 'Olá'}}]}}]}]}
 
@@ -73,8 +88,8 @@ class WebhookTests(unittest.TestCase):
     def test_reply_and_duplicate(self):
         for _ in range(2):
             self.assertEqual(self.post(self.payload()).status_code, 200)
-        self.generate.assert_awaited_once_with('Olá')
-        self.deliver.assert_awaited_once_with('authorized-test-sender', self.generate.return_value)
+        self.generate.assert_awaited_once_with('Olá', '5584981584252', 'inbound-test-id')
+        self.deliver.assert_awaited_once_with('5584981584252', self.generate.return_value)
         self.assertEqual(self.inbox.jobs['inbound-test-id']['state'], 'sent')
 
     def test_ignored_events(self):
