@@ -46,8 +46,10 @@ def signature(request):
 
 
 class MercadoPago:
-    async def call(self,method,path,body=None,key=None):
-        require_config()
+    async def call(self,method,path,body=None,key=None,diagnostic=False):
+        if diagnostic:
+            if method!='GET' or path!='/users/me' or not os.getenv('MP_ACCESS_TOKEN'):raise HTTPException(503,'pix_provider_not_connected')
+        else:require_config()
         headers={'Authorization':'Bearer '+os.environ['MP_ACCESS_TOKEN']}
         if key:headers['X-Idempotency-Key']=key
         try:
@@ -245,6 +247,16 @@ def billing_router(database):
             return record['license_id']
         authorize(request)
         return request.query_params.get('license_id')
+    @api.get('/connection')
+    async def connection(request:Request):
+        authorize(request)
+        missing=[k for k in ('MP_ACCESS_TOKEN','MP_WEBHOOK_SECRET','MP_COLLECTOR_ID','BILLING_PUBLIC_BASE_URL') if not os.getenv(k)]
+        result={'configured':bool(configured()),'missing':missing,'receiver_id':None,'receiver_matches':False}
+        if os.getenv('MP_ACCESS_TOKEN'):
+            account=await MercadoPago().call('GET','/users/me',diagnostic=True)
+            result.update(receiver_id=str(account.get('id','')),receiver_matches=str(account.get('id'))==os.getenv('MP_COLLECTOR_ID'),
+                brazil_account=account.get('site_id')=='MLB',live_mode='test_user' not in account.get('tags',[]))
+        return result
     @api.get('/account')
     async def account(request:Request):return jsonable_encoder(await PixBilling(db()).account(await identity(request)))
     @api.post('/checkout')

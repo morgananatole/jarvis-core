@@ -71,3 +71,18 @@ class OrdersTests(unittest.IsolatedAsyncioTestCase):
         request=Request({'type':'http','method':'POST','path':'/','query_string':f'data.id={identity}'.encode(),
             'headers':[(b'x-request-id',b'req1'),(b'x-signature',f'ts={stamp},v1={digest}'.encode())]})
         self.assertEqual(signature(request),identity)
+    async def test_owner_diagnostic_works_before_receiver_configuration(self):
+        import httpx
+        from fastapi import FastAPI
+        from pix_billing import billing_router
+        app=FastAPI();app.include_router(billing_router(lambda:self.db))
+        with patch.dict(os.environ,{'MP_COLLECTOR_ID':'','BILLING_PUBLIC_BASE_URL':''}),patch.object(MercadoPago,'call',AsyncMock(return_value=ACCOUNT)):
+            async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),base_url='https://jarvis.test') as client:
+                self.assertEqual((await client.get('/billing/connection')).status_code,401)
+                response=await client.get('/billing/connection',headers={'Authorization':'Bearer '+os.environ['CRM_ADMIN_TOKEN']})
+                self.assertEqual(response.status_code,200)
+                data=response.json()
+                self.assertEqual(data['receiver_id'],'123')
+                self.assertEqual(data['missing'],['MP_COLLECTOR_ID','BILLING_PUBLIC_BASE_URL'])
+                self.assertFalse(data['configured'])
+                self.assertNotIn(os.environ['MP_ACCESS_TOKEN'],response.text)
