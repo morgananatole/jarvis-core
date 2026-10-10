@@ -8,7 +8,7 @@ O painel ganhou **Minha assinatura · pagar ou renovar**, disponível na tela de
 
 Proprietário → Acessos e conexão → Licenças → definir preço e dias por pagamento. O cliente não escolhe preço, empresa ou quantidade de dias. Cobrança Pix gera QR e copia e cola, consulta o pagamento e renova a validade. Pagamento antecipado soma dias à validade existente; vencida, soma a partir da confirmação. Preço fica preservado no pedido, mesmo se a tabela mudar depois.
 
-A implementação usa Checkout Transparente / Payments API do Mercado Pago, com `X-Idempotency-Key` persistente por pedido. CPF/e-mail do pagador seguem ao provedor; o app guarda apenas hash para repetição segura. Não há débito automático: cada período exige um Pix pago pelo cliente. Pix Automático/assinatura bancária é outro fluxo, ainda não implementado. Valores de venda são definidos pelo proprietário, não inventados pelo sistema.
+A implementação usa Checkout Transparente / Orders API do Mercado Pago, com `X-Idempotency-Key` persistente por pedido. E-mail do pagador segue ao provedor; o app guarda apenas hash para repetição segura. Não há débito automático: cada período exige um Pix pago pelo cliente. Pix Automático/assinatura bancária é outro fluxo, ainda não implementado. Valores de venda são definidos pelo proprietário, não inventados pelo sistema.
 
 Webhook é validado por HMAC e tempo; o servidor busca o pagamento diretamente no provedor e confere ID, vendedor recebedor, referência do pedido, valor, BRL, método Pix e ambiente real/teste. JSON dizendo “approved”, print ou clique do cliente não liberam acesso. A extensão é uma operação atômica na licença com registro dos pedidos aplicados; repetição do evento não soma dias duas vezes. Uma confirmação perdida pode ser recuperada por consulta no painel ou worker independente. Revogação administrativa não é removida por um pagamento. Estorno/disputa posterior aparece como revisão, sem reversão automática da validade já concedida; o proprietário deve tratar reembolso e acesso.
 
@@ -33,9 +33,9 @@ Variáveis privadas no serviço:
 - `BILLING_PUBLIC_BASE_URL=https://jarvis-core-ou8d.onrender.com`.
 - `BILLING_MP_LIVE_MODE=true` em produção; `false` em teste. Pagamento de teste nunca libera licença quando o servidor espera produção.
 
-No painel do Mercado Pago, configure evento `payment` e webhook `https://jarvis-core-ou8d.onrender.com/billing/webhook/mercadopago`. O app também envia essa URL na criação do pedido. Credenciais devem ser configuradas diretamente no ambiente seguro do serviço, nunca coladas em documentação/Git ou entregues ao cliente.
+No painel do Mercado Pago, configure evento **Order (Mercado Pago)** (`order`) e webhook `https://jarvis-core-ou8d.onrender.com/billing/webhook/mercadopago`. A URL é configurada no painel do provedor; não segue no payload Orders. Credenciais devem ser configuradas diretamente no ambiente seguro do serviço, nunca coladas em documentação/Git ou entregues ao cliente.
 
-Não foi conectada conta recebedora nem realizado Pix real nesta etapa. Sem credenciais, a tela explica a pendência e não gera um QR fictício. Para um piloto, use uma licença separada, um dispositivo de teste, valor explicitamente aprovado pelo proprietário e teste confirmado na conta recebedora. Depois confira validade, repetição de webhook e acesso após expiração. Não reutilize as credenciais fictícias dos testes.
+Morgan informou configuração das credenciais produtivas, webhook e serviço Live. Não foi confirmado Pix real nesta etapa. Sem credenciais, a tela explica a pendência e não gera um QR fictício. Para um piloto, use uma licença separada, um dispositivo de teste, valor explicitamente aprovado pelo proprietário e teste confirmado na conta recebedora. Depois confira validade, repetição de webhook e acesso após expiração. Não reutilize as credenciais fictícias dos testes.
 
 Worker consulta até cinco pedidos pendentes por passagem, com intervalo de cinco minutos por pedido e separado do processamento de WhatsApp. Cada processo verifica a fila a cada minuto. Render gratuito pode suspender o processo; webhook pode despertar o serviço e consultas no painel recuperam confirmação. Continuidade 24h requer infraestrutura que não suspenda, ainda não contratada.
 
@@ -55,5 +55,13 @@ Fontes primárias consultadas em 10/10/2026:
 
 - Meta: https://about.fb.com/news/2025/09/bringing-new-tools-to-help-businesses-boost-engagement-customer-support-and-discoverability/
 - Fluxo Meta: https://developers.facebook.com/docs/whatsapp/embedded-signup/custom-flows/onboarding-business-app-users/
-- Pix: https://www.mercadopago.com.br/developers/pt/docs/checkout-api-payments/integration-configuration/integrate-pix?scope=prod
-- Webhooks: https://www.mercadopago.com.br/developers/pt/docs/checkout-api-payments/additional-content/your-integrations/notifications/webhooks
+- Pix: https://www.mercadopago.com.br/developers/pt/docs/checkout-api-orders/payment-integration/websites/pix
+- Webhooks: https://www.mercadopago.com.br/developers/pt/docs/checkout-api-orders/notifications
+
+## Migração para Orders em 10/10/2026
+
+Novas cobranças: POST `/v1/orders`; confirmação: GET `/v1/orders/{ORD...}`. Valores são strings decimais; Pix usa `bank_transfer`, `expiration_time=PT1H` e idempotência persistente. Pedidos antigos numéricos continuam consultáveis por `/v1/payments/{id}`. A assinatura usa o identificador alfanumérico em minúsculas no manifesto, preservando o ID original na consulta.
+
+Antes de criar e consultar Orders, GET `/users/me` verifica o ID recebedor fixado por `MP_COLLECTOR_ID`, site brasileiro MLB e ambiente pelos marcadores da conta. **Client ID da aplicação não é ID recebedor.** A licença só renova quando pedido e transação estão `processed/accredited`, valor pago e valor total conferem e os demais dados correspondem ao pedido local. Evento JSON isolado nunca libera.
+
+Criação assíncrona pode retornar `processing` sem QR; a consulta ou worker recupera o QR posteriormente. Paradas: configuração incompleta → 503; recebedor/ambiente divergente → 409; API indisponível → 502; ainda aguardando transferência → pendente, sem renovação. Repetições não somam validade duas vezes.

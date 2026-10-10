@@ -30,7 +30,7 @@ def signature(request):
     payment=request.query_params.get('data.id','')
     request_id=request.headers.get('x-request-id','')
     header=request.headers.get('x-signature','')
-    if len(header)>256 or not re.fullmatch(r'[0-9]{1,30}',payment) or not re.fullmatch(r'[A-Za-z0-9_-]{1,100}',request_id):
+    if len(header)>256 or not re.fullmatch(r'(?:[0-9]{1,30}|ORD[A-Za-z0-9]{1,60})',payment) or not re.fullmatch(r'[A-Za-z0-9_-]{1,100}',request_id):
         raise HTTPException(401,'invalid_payment_signature')
     try:
         parts=dict(p.strip().split('=',1) for p in header.split(','))
@@ -38,7 +38,7 @@ def signature(request):
         if not re.fullmatch(r'[0-9]{10}|[0-9]{13}',stamp) or not re.fullmatch(r'[0-9a-f]{64}',digest):raise ValueError()
         seconds=int(stamp)/(1000 if len(stamp)==13 else 1)
         if abs(time.time()-seconds)>300:raise ValueError()
-        manifest=f'id:{payment};request-id:{request_id};ts:{stamp};'
+        manifest=f'id:{payment.lower()};request-id:{request_id};ts:{stamp};'
         expected=hmac.new(os.environ['MP_WEBHOOK_SECRET'].encode(),manifest.encode(),hashlib.sha256).hexdigest()
         if not hmac.compare_digest(expected,digest):raise ValueError()
     except (ValueError,KeyError):raise HTTPException(401,'invalid_payment_signature') from None
@@ -56,8 +56,50 @@ class MercadoPago:
                 if response.is_error or response.is_redirect:raise ValueError()
                 return response.json()
         except (httpx.HTTPError,ValueError):raise HTTPException(502,'pix_provider_unavailable') from None
-    async def create(self,body,key):return await self.call('POST','/v1/payments',body,key)
+    async def receiver(self):
+        account=await self.call('GET','/users/me')
+        if str(account.get('id'))!=os.environ['MP_COLLECTOR_ID'] or account.get('site_id')!='MLB':
+            raise HTTPException(409,'payment_receiver_mismatch')
+        live='test_user' not in account.get('tags',[])
+        if live is not (os.getenv('BILLING_MP_LIVE_MODE','true')=='true'):
+            raise HTTPException(409,'payment_environment_mismatch')
+        return account,live
+    def normalize(self,data,account,live):
+        payments=data.get('transactions',{}).get('payments',[])
+        if len(payments)!=1:raise HTTPException(409,'invalid_order_transactions')
+        payment=payments[0];method=payment.get('payment_method',{})
+        if method.get('type')!='bank_transfer' or data.get('country_code')!='BRA':
+            raise HTTPException(409,'invalid_pix_order')
+        status=data.get('status')
+        paid=(status=='processed' and data.get('status_detail')=='accredited' and
+            payment.get('status')=='processed' and payment.get('status_detail')=='accredited')
+        if paid and (Decimal(str(payment.get('paid_amount'))) != Decimal(str(payment.get('amount'))) or
+            Decimal(str(data.get('total_paid_amount'))) != Decimal(str(data.get('total_amount')))):
+            raise HTTPException(409,'payment_verification_mismatch')
+        if Decimal(str(payment.get('amount'))) != Decimal(str(data.get('total_amount'))):
+            raise HTTPException(409,'payment_verification_mismatch')
+        if data.get('currency_id','BRL')!='BRL' or data.get('live_mode',live) is not live:
+            raise HTTPException(409,'payment_verification_mismatch')
+        return {'id':data['id'],'external_reference':data.get('external_reference'),
+            'collector_id':account['id'],'currency_id':'BRL','live_mode':live,
+            'payment_method_id':method.get('id'),'transaction_amount':data.get('total_amount'),
+            'status':'approved' if paid else 'refunded' if status=='refunded' else 'charged_back' if status=='charged_back' else 'pending' if status=='action_required' else 'in_process' if status in ('processing','processed') else status,
+            'transaction_amount_refunded':payment.get('refunded_amount',0),
+            'point_of_interaction':{'transaction_data':method}}
+    async def create(self,body,key):
+        account,live=await self.receiver()
+        amount=format(Decimal(str(body['transaction_amount'])),'.2f')
+        payload={'type':'online','total_amount':amount,'external_reference':body['external_reference'],
+            'processing_mode':'automatic','payer':{'email':body['payer']['email']},
+            'transactions':{'payments':[{'amount':amount,'payment_method':{'id':'pix','type':'bank_transfer'},'expiration_time':'PT1H'}]}}
+        data=await self.call('POST','/v1/orders',payload,key)
+        if data.get('status')=='processing' and not data.get('transactions',{}).get('payments'):
+            return {'id':data['id']}
+        return self.normalize(data,account,live)
     async def get(self,identity):
+        if re.fullmatch(r'ORD[A-Za-z0-9]{1,60}',str(identity)):
+            account,live=await self.receiver()
+            return self.normalize(await self.call('GET','/v1/orders/'+identity),account,live)
         if not re.fullmatch(r'[0-9]{1,30}',str(identity)):raise HTTPException(400,'invalid_payment_id')
         return await self.call('GET','/v1/payments/'+str(identity))
 
@@ -126,7 +168,7 @@ class PixBilling:
         try:
             data=await self.provider.create(provider_body,claim['_id'])
             payment=str(data['id'])
-            if not re.fullmatch(r'[0-9]{1,30}',payment):raise ValueError()
+            if not re.fullmatch(r'(?:[0-9]{1,30}|ORD[A-Za-z0-9]{1,60})',payment):raise ValueError()
             qr=data.get('point_of_interaction',{}).get('transaction_data',{})
             image=qr.get('qr_code_base64','');code=qr.get('qr_code','')
             if not isinstance(code,str) or len(code)>4000 or not isinstance(image,str) or len(image)>200000 or (image and not re.fullmatch(r'[A-Za-z0-9+/=]+',image)):raise ValueError()
@@ -148,6 +190,10 @@ class PixBilling:
                 data.get('live_mode') is not (os.getenv('BILLING_MP_LIVE_MODE','true')=='true')):raise ValueError()
         except (ValueError,KeyError,InvalidOperation):raise HTTPException(409,'payment_verification_mismatch') from None
         status=data.get('status')
+        qr=data.get('point_of_interaction',{}).get('transaction_data',{})
+        code,image=qr.get('qr_code',''),qr.get('qr_code_base64','')
+        if isinstance(code,str) and len(code)<=4000 and isinstance(image,str) and len(image)<=200000 and (not image or re.fullmatch(r'[A-Za-z0-9+/=]+',image)):
+            await self.db.billing_orders.update_one({'_id':order_id},{'$set':{'qr_code':code,'qr_code_base64':image}})
         if status!='approved':
             # Refunds and disputes remain visible for owner review, never disguised as paid.
             await self.db.billing_orders.update_one({'_id':order_id},{'$set':{'provider_status':status,'checked_at':now(),
@@ -216,7 +262,7 @@ def billing_router(database):
         payment=signature(request)
         if len(await request.body())>8192:raise HTTPException(413,'Payload too large')
         body=await request.json()
-        if not isinstance(body,dict) or body.get('type')!='payment' or not isinstance(body.get('data'),dict) or str(body['data'].get('id'))!=payment:
+        if not isinstance(body,dict) or body.get('type')!=('order' if payment.startswith('ORD') else 'payment') or not isinstance(body.get('data'),dict) or str(body['data'].get('id'))!=payment:
             raise HTTPException(400,'invalid_payment_notification')
         order=await db().billing_orders.find_one({'payment_id':payment,'business_id':business()})
         if not order:return {'received':True,'matched':False}
