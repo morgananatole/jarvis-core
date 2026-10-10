@@ -70,6 +70,23 @@ class UsabilityContractTests(unittest.TestCase):
         self.assertIn(":focus-visible", self.html)
         self.assertIn("@media(max-width:600px)", self.html)
 
+    def test_commercial_first_run_asks_questions_without_requiring_technical_setup(self):
+        for element in ("commercialSetup", "setupProgress", "setupQuestion",
+                        "setupAnswer", "setupBack", "setupNext"):
+            self.assertIn('id="' + element + '"', self.html)
+        self.assertIn("const commercialQuestions=[", self.html)
+        self.assertIn("commercialQuestions.length-1", self.html)
+        self.assertIn("Conferir minhas respostas", self.html)
+        self.assertIn("Nenhum dado foi publicado automaticamente.", self.html)
+        self.assertIn("perfil para revisão", self.html.lower())
+
+    def test_trial_is_default_and_payment_is_not_misrepresented(self):
+        self.assertIn('id="licenseTrial" type="checkbox" checked', self.html)
+        self.assertIn("trial_days:30", self.html)
+        self.assertIn("contados da emissão", self.html)
+        self.assertIn("débito Pix Automático ainda não está conectado", self.html)
+        self.assertIn("cada empresa deve ter seu ambiente de dados", self.html)
+
     def test_javascript_syntax_with_node(self):
         if not shutil.which("node"):
             self.skipTest("Node runtime unavailable; HTML structural tests still ran")
