@@ -83,6 +83,39 @@ class Tests(dev.Tests):
         for body in ({'expires_at':'2027-01-01'},{'expires_at':lic['expires_at'].isoformat()}):
             with self.assertRaises(HTTPException):await self.licenses.renew(lic['license_id'],body)
 
+    async def test_explicit_30_day_start_requires_no_date(self):
+        before = datetime.now(timezone.utc)
+        lic = await self.licenses.issue({'label': 'Novo assinante', 'kind': 'subscription',
+                                         'max_devices': 1, 'trial_days': 30})
+        after = datetime.now(timezone.utc)
+        self.assertEqual(lic['trial_days'], 30)
+        self.assertGreaterEqual(lic['expires_at'], before + timedelta(days=30))
+        self.assertLessEqual(lic['expires_at'], after + timedelta(days=30))
+        self.assertEqual(self.db.commercial_licenses.docs[lic['license_id']]['trial_days'], 30)
+
+    async def test_trial_rejects_invalid_duration_or_conflicting_dates(self):
+        original = len(self.db.commercial_licenses.docs)
+        cases = [
+            {'kind': 'subscription', 'trial_days': 7},
+            {'kind': 'subscription', 'trial_days': True},
+            {'kind': 'subscription', 'trial_days': 30, 'expires_at':
+                (datetime.now(timezone.utc) + timedelta(days=40)).isoformat()},
+            {'kind': 'permanent', 'trial_days': 30}
+        ]
+        for extra in cases:
+            with self.assertRaises(HTTPException) as error:
+                await self.licenses.issue({'label': 'Teste', 'max_devices': 1, **extra})
+            self.assertEqual(error.exception.detail, 'invalid_30_day_trial')
+        self.assertEqual(len(self.db.commercial_licenses.docs), original)
+
+    async def test_trial_is_not_a_payment_authorization(self):
+        lic = await self.licenses.issue({'label': 'Sem preco', 'kind': 'subscription',
+                                         'max_devices': 1, 'trial_days': 30})
+        data = self.db.commercial_licenses.docs[lic['license_id']]
+        self.assertNotIn('billing_price', data)
+        self.assertNotIn('auto_debit_authorization', data)
+        self.assertNotIn('payment_id', data)
+
     async def test_customer_device_cannot_issue_or_renew_licenses(self):
         identity=await self.enrolled()
         app=FastAPI();app.include_router(router(lambda:self.db,lambda db:None))
