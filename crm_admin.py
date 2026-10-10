@@ -73,7 +73,7 @@ def router(database, conversation):
         body = await request.json()
         if not isinstance(body, dict): raise HTTPException(400, 'invalid_intake_item')
         try:
-            return jsonable_encoder(await BusinessIntake(db()).review_date(identity, body.get('index'), body.get('due_at'), body.get('phone'), actor(request)))
+            return jsonable_encoder(await BusinessIntake(db()).review_date(identity, body.get('index'), body.get('due_at'), body.get('phone'), actor(request), body.get('purpose')))
         except ValueError as error:
             raise HTTPException(409, str(error))
 

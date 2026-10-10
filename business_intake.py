@@ -229,7 +229,7 @@ class BusinessIntake:
             raise ValueError('partial_application_retry_safe') from None
         return self.public(await self.db.business_documents.find_one({'_id': identity}))
 
-    async def review_date(self, identity, index, due_at, phone, actor):
+    async def review_date(self, identity, index, due_at, phone, actor, purpose=None):
         doc = await self.db.business_documents.find_one({'_id': identity, 'business_id': tenant()})
         if not doc or doc['state'] != 'preview': raise ValueError('intake_not_reviewable')
         if not isinstance(index, int) or isinstance(index, bool) or not 0 <= index < len(doc['analysis']['items']):
@@ -245,6 +245,9 @@ class BusinessIntake:
         # Explicit operator correction is separately attributed, never passed off as OCR.
         fields = {'due_at': due, 'phone': number, 'warning': None, 'corrected_by': actor,
                   'corrected_at': datetime.now(timezone.utc)}
+        if purpose is not None:
+            if not isinstance(purpose, str) or not purpose.strip() or len(purpose) > 500: raise ValueError('invalid_event_purpose')
+            fields['purpose'] = purpose.strip()
         result = await self.db.business_documents.update_one({'_id': identity, 'business_id': tenant(), 'state': 'preview'},
             {'$set': {'analysis.items.' + str(index) + '.' + k: v for k, v in fields.items()}})
         if not result.matched_count: raise ValueError('intake_busy')
