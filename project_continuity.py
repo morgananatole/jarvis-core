@@ -1,6 +1,7 @@
 """Owner-only project continuity journal. Lives in MongoDB, not in a public repo."""
 from datetime import datetime, timezone
 from pymongo.errors import DuplicateKeyError
+import re
 
 
 MAX_CONTENT = 30000
@@ -72,3 +73,66 @@ class ContinuityJournal:
                    "updated_at": now,
                    "history": (existing.get("history", []) + [snapshot])[-MAX_HISTORY:]}
         return self._public(new_doc)
+
+
+    async def record(self, payload):
+        """Append immutable classified entry; revisions refer to the previous directive."""
+        data = validate_entry(payload)
+        events = self.collection.database.project_continuity_entries
+        item = {
+            '_id': self.key + ':' + data['key'], 'owner': self.key,
+            'kind': data['kind'], 'text': data['text'],
+            'key': data['key'], 'revises': data['revises'],
+            'created_at': datetime.now(timezone.utc),
+        }
+        if data['kind'] == 'revised_directive':
+            previous = await events.find_one({'_id': self.key + ':' + data['revises'],
+                                              'owner': self.key})
+            if not previous or previous['kind'] not in ('directive', 'revised_directive'):
+                raise ValueError('unknown_prior_directive')
+        try:
+            await events.insert_one(item)
+        except DuplicateKeyError:
+            previous = await events.find_one({'_id': item['_id'], 'owner': self.key})
+            if not previous or any(previous[k] != item[k] for k in ('kind', 'text', 'revises')):
+                raise VersionConflict('continuity_entry_conflict')
+            item = previous
+        return self._event_public(item)
+
+    @staticmethod
+    def _event_public(item):
+        return {k: item.get(k) for k in ('key', 'kind', 'text', 'revises', 'created_at')}
+
+    async def entries(self):
+        cursor = (self.collection.database.project_continuity_entries
+                  .find({'owner': self.key}).sort('created_at', -1).limit(50))
+        records = await cursor.to_list(length=50)
+        return [self._event_public(item) for item in records]
+
+
+KINDS = {
+    'idea': 'Ideia em avaliação',
+    'directive': 'Diretriz aprovada pelo proprietário',
+    'proposal': 'Sugestão técnica',
+    'verified': 'Fato verificado',
+    'revised_directive': 'Diretriz revisada pelo proprietário',
+}
+
+
+def validate_entry(payload):
+    if not isinstance(payload, dict):
+        raise ValueError('invalid_continuity_entry')
+    kind = payload.get('kind')
+    note = payload.get('text')
+    key = payload.get('key')
+    revises = payload.get('revises') or None
+    if (kind not in KINDS or not isinstance(note, str) or not note.strip()
+            or len(note) > 5000 or not isinstance(key, str)
+            or not re.fullmatch(r'[a-zA-Z0-9_-]{12,72}', key)):
+        raise ValueError('invalid_continuity_entry')
+    if kind == 'revised_directive' and (
+            not isinstance(revises, str) or not re.fullmatch(r'[a-zA-Z0-9_-]{12,72}', revises)):
+        raise ValueError('revision_reference_required')
+    if kind != 'revised_directive' and revises is not None:
+        raise ValueError('only_revised_directives_can_replace')
+    return {'kind': kind, 'text': note.strip(), 'key': key, 'revises': revises}
