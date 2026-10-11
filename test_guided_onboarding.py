@@ -23,3 +23,14 @@ context.businessConfigured=true;context.refreshJourney();assert.equal(el('journe
 '''.replace('CODE',json.dumps(code))
         result=subprocess.run(['node','-e',script],capture_output=True,text=True,timeout=10)
         self.assertEqual(result.returncode,0,result.stderr)
+
+    def test_install_help_is_visible_from_welcome_and_viewer(self):
+        html=Path('panel.html').read_text()
+        code=html[html.index("el('installApp').onclick="):html.index("window.addEventListener('appinstalled'")]
+        script=r"""
+const vm=require('node:vm'),assert=require('node:assert/strict');let els={installApp:{},installation:{hidden:true,scrollIntoView:()=>{}},installGuide:{},installStatus:{}};
+vm.runInNewContext(CODE,{el:id=>els[id],installPrompt:null,refreshInstallation:()=>{}});
+(async()=>{await els.installApp.onclick();assert.equal(els.installation.hidden,false);assert.equal(els.installGuide.open,true);assert.match(els.installStatus.textContent,/orientação/);})().catch(e=>{console.error(e);process.exitCode=1});
+""".replace('CODE',json.dumps(code))
+        result=subprocess.run(['node','-e',script],capture_output=True,text=True,timeout=10)
+        self.assertEqual(result.returncode,0,result.stderr)
