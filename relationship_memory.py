@@ -30,7 +30,7 @@ CUES = (
         r"\b(?:nao quero (?:receber )?ligac(?:ao|oes)|prefiro que nao me ligu(?:em|e))\b",
     )),
     ("messages", (
-        r"\b(?:prefiro (?:conversar|falar|receber contato) (?:por|via) mensagem|prefiro mensagens)\b",
+        r"\b(?:prefiro (?:conversar|falar|receber contato) (?:por|via) mensage(?:m|ns)|prefiro mensagens)\b",
     )),
     ("calls", (
         r"\b(?:prefiro (?:conversar|falar) por telefone|prefiro que me ligu(?:em|e))\b",
