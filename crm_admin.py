@@ -434,7 +434,7 @@ def panel():
     from pathlib import Path
     return HTMLResponse(Path(__file__).with_name('panel.html').read_text(encoding='utf-8'), headers={
         'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer',
-        'Content-Security-Policy': "default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'"})
+        'Content-Security-Policy': "default-src 'self'; script-src 'unsafe-inline'; worker-src 'self'; style-src 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'"})
 
 
 def enrollment_router(database):
