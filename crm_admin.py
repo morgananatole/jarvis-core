@@ -105,6 +105,24 @@ def router(database, conversation):
         except (ValueError, TypeError):
             raise HTTPException(400, 'invalid_continuity') from None
 
+    @api.get('/continuity/entries', dependencies=[Depends(authorize)])
+    async def continuity_entries():
+        return jsonable_encoder(await ContinuityJournal(db(), tenant()).entries())
+
+    @api.post('/continuity/entries', dependencies=[Depends(authorize)])
+    async def continuity_record(request: Request):
+        raw = await request.body()
+        if len(raw) > 6144:
+            raise HTTPException(413, 'continuity_too_large')
+        try:
+            body = await request.json()
+            return jsonable_encoder(await ContinuityJournal(db(), tenant()).record(body))
+        except VersionConflict as error:
+            raise HTTPException(409, str(error)) from None
+        except (ValueError, TypeError) as error:
+            raise HTTPException(400, str(error)) from None
+
+
     @api.get('/business/events')
     async def business_events():
         return jsonable_encoder(await db().business_entities.find({'business_id': tenant()}).sort('created_at', -1).limit(200).to_list(200))
