@@ -92,6 +92,22 @@ class RelationshipIntegrationTests(unittest.IsolatedAsyncioTestCase):
         profile = await self.memory.ensure(self.phone)
         self.assertEqual(len(profile["relationship"]["moments"]), 1)
 
+    async def test_mixed_message_retry_preserves_both_cues_and_ai_context(self):
+        utterance = "Gostei muito do atendimento, mas prefiro conversar por mensagens."
+        for _ in range(2):
+            await self.memory.record_inbound(self.phone, "mixed-1", utterance,
+                                             self.now.timestamp())
+        profile = await self.memory.ensure(self.phone)
+        moments = profile["relationship"]["moments"]
+        self.assertEqual([item["kind"] for item in moments], ["praise", "messages"])
+        self.assertEqual({item["source_message_id"] for item in moments}, {"mixed-1"})
+        self.assertEqual(profile["inbound_count"], 1)
+        self.assertEqual(profile["relationship"]["contact_preference"]["kind"],
+                         "messages")
+        ready = json.loads(await self.memory.context(self.phone))
+        self.assertEqual([item["kind"] for item in ready["relationship"]["reported_moments"]],
+                         ["praise", "messages"])
+
     async def test_resolution_removes_open_issue_without_erasing_history(self):
         await self.memory.record_inbound(self.phone, "m1", "Não recebi resposta",
                                          self.now.timestamp())
