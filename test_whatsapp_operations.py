@@ -62,6 +62,39 @@ class Tests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(result['recent_message_state'])
         self.assertIn('nao prova', result['note'])
 
+    async def test_delivery_receipts_are_matched_to_latest_message_only(self):
+        class Receipts:
+            def __init__(self, content):
+                self.content = content
+                self.queries = []
+            async def find_one(self, query, projection):
+                self.queries.append((query, projection))
+                return self.content if query['_id'] == 'outgoing-new' else None
+        old = {'state': 'sent', 'received_at': 1791720000, 'outbound_id': 'outgoing-old'}
+        latest = {'state': 'sent', 'received_at': 1791720100, 'outbound_id': 'outgoing-new'}
+        for receipt, expected in [
+            (None, 'awaiting_delivery_receipt'),
+            ({'delivery_sent_at': 'now'}, 'sent_not_confirmed_delivered'),
+            ({'delivery_failed_at': 'now'}, 'failed'),
+            ({'delivery_failed_at': 'now', 'delivery_delivered_at': 'later'}, 'delivered'),
+            ({'delivery_read_at': 'now'}, 'read'),
+        ]:
+            db = DB([old, latest])
+            db.delivery_receipts = Receipts(receipt)
+            result = await operations(db)
+            self.assertEqual(result['recent_message_delivery_state'], expected)
+            self.assertEqual(result['message_delivery_verified'], expected in ('delivered', 'read'))
+            self.assertEqual(db.delivery_receipts.queries[0][0], {'_id': 'outgoing-new'})
+            self.assertNotIn('outgoing-new', str(result))
+            self.assertNotIn('outgoing-old', str(result))
+
+    async def test_no_accepted_reply_has_no_delivery_claim(self):
+        result = await operations(DB([{'state': 'human_waiting', 'received_at': 1791720100}]))
+        self.assertEqual(result['recent_message_state'], 'human_waiting')
+        self.assertFalse(result['recent_message_meta_accepted'])
+        self.assertEqual(result['recent_message_delivery_state'], 'no_accepted_reply')
+        self.assertFalse(result['message_delivery_verified'])
+
     async def test_hybrid_mode_safely_marks_test_restriction_and_paid_fallback(self):
         with patch.dict(os.environ, {'JARVIS_REPLY_MODE': 'hybrid',
                 'AI_ALLOWED_TEST_ONLY': 'true','AI_PAID_FALLBACK_ENABLED':'false'}):
