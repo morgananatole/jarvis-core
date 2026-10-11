@@ -3,6 +3,11 @@ import unittest
 from copy import deepcopy
 from pymongo.errors import DuplicateKeyError
 from project_continuity import ContinuityJournal, VersionConflict, validate_entry
+import os
+from unittest.mock import patch
+import httpx
+from fastapi import FastAPI
+from crm_admin import router
 
 
 class Cursor:
@@ -117,6 +122,21 @@ class ContinuityTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(await self.a.entries()), 1)
         with self.assertRaises(VersionConflict):
             await self.a.record({**event, 'text': 'Texto indevido'})
+
+    async def test_api_requires_owner_token_not_public_access(self):
+        app = FastAPI()
+        app.include_router(router(lambda: self.db, lambda db: None))
+        with patch.dict(os.environ, {'CRM_ADMIN_TOKEN': 'o' * 40}):
+            async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://test') as c:
+                rejected = await c.get('/crm/continuity')
+                self.assertEqual(rejected.status_code, 401)
+                owner = await c.get('/crm/continuity', headers={
+                    'Authorization': 'Bearer ' + 'o' * 40})
+                self.assertEqual(owner.status_code, 200)
+                self.assertEqual(owner.json()['revision'], 0)
+                unauthenticated_entry = await c.post('/crm/continuity/entries', json={
+                    'text': 'Não expor', 'kind': 'idea', 'key': 'idempotency_key_0009'})
+                self.assertEqual(unauthenticated_entry.status_code, 401)
 
     async def test_validation_rejects_unsafe_shapes(self):
         for body in [
