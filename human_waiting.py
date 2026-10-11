@@ -4,27 +4,39 @@ This is an answer to an open customer conversation, never a marketing follow-up.
 Human queue and reviewed follow-ups remain intact. One-instance contact locks apply.
 """
 import os
+import logging
 from datetime import datetime, timedelta, timezone
 from pymongo.errors import DuplicateKeyError
 from contact_memory import ContactMemory
 from human_service import active_window, conversation_lock
 
 WAIT = timedelta(minutes=5)
+log = logging.getLogger('jarvis')
 DIRECT_CONTACT = (
     'Para tentar falar diretamente, ligue: tel:+5581989927699\n'
     'Abrir conversa no WhatsApp: https://wa.me/5581989927699\n'
     'Número para copiar: +55 81 98992-7699'
 )
+DIRECT_CONTACT_GUIDANCE = (
+    'Não comece o acompanhamento enviando telefone ou links. Primeiro escute a necessidade. '
+    'Ofereça contato direto quando o cliente pedir ligação, WhatsApp ou telefone, ou quando '
+    'um encaminhamento direto for necessário. Use só o canal útil, sem despejar três opções '
+    'sem necessidade. Não garanta disponibilidade humana. Contatos informados: ' + DIRECT_CONTACT
+)
 SUPPORT_GUIDANCE = (
-    'O atendimento humano de Morgan continua pendente. Você está apoiando a conversa '
+    'A fila registra atendimento humano pendente; isso não prova que o cliente não foi '
+    'atendido por outro canal. Primeiro verifique se já recebeu atendimento, usando o '
+    'histórico e a resposta atual. Se ele já informou isso, não repita a pergunta. '
+    'Se foi atendido, reconheça e pergunte apenas se ficou alguma necessidade, quando '
+    'relevante; não contradiga seu relato com o status da fila nem declare resolução '
+    'total sem confirmação. Se ainda aguarda, reconheça a espera sem desculpas repetidas '
+    'e ajude na dúvida concreta. Você está apoiando a conversa '
     'enquanto o cliente aguarda, sem substituir a decisão humana. Informe isso quando '
     'relevante; esclareça dúvidas comerciais com fatos disponíveis e ofereça um próximo '
     'passo útil. Não diga que Morgan está em reunião, atendendo outra pessoa ou que '
     'responderá em determinado horário sem confirmação. Não confirme fechamento, '
     'vaga, pagamento, resgate nem conduta clínica em nome dele. Não encerre a fila humana.'
-    '\nSe o cliente precisar de contato direto, ofereça estes caminhos informados pelo '
-    'proprietário, sem garantir disponibilidade nem que abrir WhatsApp inicia atendimento humano: '
-    + DIRECT_CONTACT
+    '\n' + DIRECT_CONTACT_GUIDANCE
 )
 
 
@@ -90,13 +102,12 @@ class WaitingService:
             except DuplicateKeyError:
                 return {'state': 'already_claimed'}
             protected = profile.get('human_only') or queue.get('reason') == 'urgent'
-            text = ('Sou o JARVIS, assistente virtual. Seu pedido continua aguardando o atendimento '
-                    'de Morgan; ainda não tenho confirmação de quando ele poderá responder. ')
-            text += ('O encaminhamento humano continua pendente; não posso confirmar execução ou horário.'
+            text = ('Você já conseguiu receber o atendimento humano de que precisava? '
+                    'Sou o JARVIS, assistente virtual, e estou acompanhando sua solicitação. ')
+            text += ('Seu pedido permanece disponível para Morgan; não tenho confirmação de horário.'
                      if protected else
-                     'Enquanto você aguarda, posso esclarecer alguma dúvida sobre nosso serviço? '
-                     'Continuo por aqui para ajudar, e seu pedido de atendimento humano permanece na fila.')
-            text += '\n\n' + DIRECT_CONTACT
+                     'Se ainda estiver aguardando, continuo por aqui para ajudar com suas dúvidas '
+                     'enquanto Morgan não responde.')
             try:
                 mid = await self.send(profile['phone'], text)
                 await ContactMemory(self.db).record_outbound(profile['phone'], mid, text)
@@ -107,10 +118,12 @@ class WaitingService:
                     'wait_notice_outbound_id': mid}})
                 await self.db.contacts.update_one({'_id': key}, {'$set': {
                     'ai_waiting_assist': not protected}})
+                log.info('Human waiting care acknowledgement accepted')
                 return {'state': 'accepted', 'assistance': not protected}
             except Exception:
                 # A crash in sending is also non-retryable: unique job survives restart.
                 await self.db.operator_jobs.update_one({'_id': job_id}, {'$set': {'state': 'review_required'}})
                 await self.db.human_requests.update_one({'_id': key}, {'$set': {
                     'wait_notice_state': 'review_required', 'unread': True}})
+                log.warning('Human waiting care acknowledgement requires review')
                 return {'state': 'review_required'}

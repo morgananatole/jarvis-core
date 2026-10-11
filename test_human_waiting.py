@@ -35,9 +35,11 @@ class WaitingTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(can_assist(profile, self.db.human_requests.docs[key]))
         self.assertEqual(self.db.human_requests.docs[key]['state'], 'waiting')
         text = self.send.call_args.args[1]
-        self.assertIn('tel:+5581989927699', text)
-        self.assertIn('https://wa.me/5581989927699', text)
-        self.assertIn('+55 81 98992-7699', text)
+        self.assertTrue(text.startswith('Você já conseguiu receber o atendimento humano'))
+        self.assertEqual(text.count('?'), 1)
+        self.assertNotIn('tel:', text)
+        self.assertNotIn('wa.me', text)
+        self.assertNotIn('7699', text)
         self.assertNotIn('está em reunião', text)
 
     async def test_new_customer_messages_do_not_restart_timer(self):

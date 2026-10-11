@@ -21,7 +21,7 @@ from pymongo.errors import DuplicateKeyError, InvalidURI, ConfigurationError, Op
 from ai_router import ReplyRouter
 from contact_memory import ContactMemory, contact_key
 from human_service import HumanService, conversation_lock, takeover_reason, exclusive_human
-from human_waiting import WaitingService, can_assist, SUPPORT_GUIDANCE, DIRECT_CONTACT
+from human_waiting import WaitingService, can_assist, SUPPORT_GUIDANCE, DIRECT_CONTACT_GUIDANCE
 from ai_router import UNAVAILABLE
 import knowledge_base
 import sales_policy
@@ -216,7 +216,7 @@ async def verify(request: Request):
 
 
 async def generate_reply(text, sender=None, source_message_id=None, waiting_for_human=False):
-    support = '\n' + SUPPORT_GUIDANCE if waiting_for_human else ''
+    support = '\n' + (SUPPORT_GUIDANCE if waiting_for_human else DIRECT_CONTACT_GUIDANCE)
     if os.getenv("JARVIS_REPLY_MODE", "openai") == "test":
         return ("Sou o JARVIS, assistente virtual da Nova Vida. "
                 "Recebi sua mensagem: este é um teste de conexão com resposta fixa, "
@@ -344,10 +344,10 @@ async def _process_message(message):
             if not new:
                 await inbox.update_one(guard, {'$set': {'state': 'human_waiting'}})
                 return
-            reply = ('Sua conversa está na fila de atendimento de Morgan. '
-                     'Se o atendimento demorar, volto para acompanhar sua espera. '
-                     'Você pode continuar por aqui; não tenho um horário confirmado para a resposta dele.\n\n'
-                     + DIRECT_CONTACT)
+            reply = ('Seu pedido de atendimento está registrado para Morgan. '
+                     'Você pode continuar por aqui; vou acompanhar sua espera e, '
+                     'se o atendimento demorar, volto para saber se já foi atendido. '
+                     'Ainda não tenho um horário confirmado para a resposta dele.')
         else:
             if assisting:
                 await inbox.database.human_requests.update_one({'_id': profile['_id']}, {'$set': {

@@ -28,3 +28,11 @@ Este protocolo depende de um assistente/sessão que **leia e siga** este arquivo
 
 ## Regra de entrega
 No fim de cada trabalho, reporte separadamente: feito e verificado, feito sem teste real, pendente/bloqueado, e exatamente como retomar. Prefira um registro parcial preservado a uma grande resposta perdida.
+
+## Missão de atendimento e produto
+Aplicar `docs/MISSAO_ATENDIMENTO.md` em mudanças de interface, conversa, venda,
+pós-venda e continuidade. Demonstrar organização por detalhes concretos: ouvir,
+usar contexto, acompanhar pendências, facilitar o próximo passo e verificar o
+resultado. Não substituir isso por slogans, porte empresarial inventado ou
+links enviados antes de compreender a necessidade. Ideias do proprietário
+permanecem classificadas como ideias até decisão expressa; manter foco na entrega.
