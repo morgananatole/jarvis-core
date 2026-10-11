@@ -93,7 +93,9 @@ class HumanService:
             raise ValueError('contact_not_found')
         async with conversation_lock(profile['_id']):
             await self.db.contacts.update_one({'_id': profile['_id']}, {'$set': {
-                'human_mode': human, 'human_since': datetime.now(timezone.utc) if human else None},
+                'human_mode': human, 'human_since': datetime.now(timezone.utc) if human else None,
+                'human_takeover_source': 'panel',
+                'human_control_at': datetime.now(timezone.utc)},
                 '$inc': {'automation_epoch': 1}})
             await self.db.human_requests.update_one({'_id': profile['_id']}, {'$set': {
                 'state': 'active' if human else 'resolved', 'contact_no': number,

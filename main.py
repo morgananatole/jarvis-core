@@ -28,6 +28,7 @@ import sales_policy
 import business_profile
 import customer_care
 import contact_options
+from whatsapp_coexistence import text_echo, record_text_echo
 from device_access import DeviceAccess
 from conversation_service import ConversationService, delivery_status
 from media_service import send_photo
@@ -353,7 +354,9 @@ async def _process_message(message):
         contact_menu = False
         direct_requested = contact_options.selected(message) or contact_options.requested(message['text']['body'])
         direct_info = await contact_options.contact(inbox.database) if direct_requested and not reason else None
-        if (profile.get('human_mode') or reason) and not assisting and not (direct_info and not profile.get('do_not_contact')):
+        if (profile.get('human_mode') or reason) and not assisting and not (
+                direct_info and not profile.get('do_not_contact')
+                and profile.get('human_takeover_source') != 'whatsapp_business_app'):
             new = await human.request(message['from'], message['id'], reason or 'human_conversation')
             if not new:
                 await inbox.update_one(guard, {'$set': {'state': 'human_waiting'}})
@@ -429,10 +432,21 @@ async def receive(request: Request):
     try:
         messages = []
         statuses = []
+        echoes = []
         for entry in payload.get("entry", []):
             for change in entry.get("changes", []):
                 value = change.get("value", {})
                 if value.get("metadata", {}).get("phone_number_id") != os.environ["WHATSAPP_PHONE_NUMBER_ID"]:
+                    continue
+                if change.get('field') == 'smb_message_echoes':
+                    if os.getenv('WHATSAPP_APP_ECHO_SYNC', 'false') == 'true':
+                        batch = value.get('message_echoes', [])
+                        if not isinstance(batch, list): raise ValueError()
+                        for message in batch:
+                            echo = text_echo(message, value['metadata'])
+                            if echo: echoes.append(echo)
+                    continue
+                if change.get('field') not in (None, 'messages'):
                     continue
                 statuses.extend(value.get("statuses", []))
                 for message in value.get("messages", []):
@@ -446,9 +460,11 @@ async def receive(request: Request):
                             raise ValueError()
                         float(message["timestamp"])
                         messages.append(message)
-    except (KeyError, TypeError, ValueError, AttributeError):
+    except (KeyError, TypeError, ValueError, AttributeError, OverflowError, OSError):
         raise HTTPException(400, "Malformed webhook")
     try:
+        for echo in echoes:
+            await record_text_echo(inbox.database, echo)
         for status in statuses:
             await delivery_status(inbox.database, status)
         for message in messages:
