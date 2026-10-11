@@ -23,6 +23,22 @@ class MultiSignalTests(unittest.TestCase):
         self.assertNotIn("praise", [x["kind"] for x in signals])
         self.assertIn("messages", [x["kind"] for x in signals])
 
+    def test_message_preference_variants_preserve_literal_evidence(self):
+        for verb in ("conversar", "falar", "receber contato"):
+            for channel in ("por", "via"):
+                for noun in ("mensagem", "mensagens"):
+                    preference = f"prefiro {verb} {channel} {noun}"
+                    with self.subTest(preference=preference):
+                        utterance = f"Gostei muito do atendimento, mas {preference}."
+                        cues = observe_all(utterance)
+                        self.assertEqual([cue["kind"] for cue in cues],
+                                         ["praise", "messages"])
+                        self.assertEqual(cues[1]["evidence"], preference)
+                        relation = update_relation({}, "variant", utterance, self.now)
+                        self.assertEqual(relation["contact_preference"]["evidence"],
+                                         preference)
+                        self.assertEqual(observe_all(f"Não {preference}."), [])
+
     def test_unresolved_problem_not_erased_by_praise(self):
         earlier = update_relation({}, "message-1", "Ninguém me respondeu.", self.now)
         next_ = update_relation({"relationship": earlier}, "message-2",
