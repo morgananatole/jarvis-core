@@ -55,9 +55,10 @@ def can_assist(profile, queue):
 
 
 class WaitingService:
-    def __init__(self, db, send, tester, clock=None):
+    def __init__(self, db, send, tester, clock=None, compose=None):
         self.db, self.send, self.tester = db, send, tester
         self.clock = clock or (lambda: datetime.now(timezone.utc))
+        self.compose = compose
 
     async def run_due(self):
         # Includes old waiting records on upgrade; legacy active records are skipped.
@@ -108,6 +109,16 @@ class WaitingService:
                      if protected else
                      'Se ainda estiver aguardando, continuo por aqui para ajudar com suas dúvidas '
                      'enquanto Morgan não responde.')
+            from business_profile import business
+            if business()!='nova_vida': text=text.replace('Morgan','a equipe humana')
+            if not protected and self.compose:
+                try:
+                    natural = await self.compose(profile)
+                    if natural:
+                        text = natural
+                except Exception:
+                    # A provider failure must not abandon the customer or retry delivery.
+                    log.info('Human waiting care uses fixed fallback')
             try:
                 mid = await self.send(profile['phone'], text)
                 await ContactMemory(self.db).record_outbound(profile['phone'], mid, text)

@@ -18,6 +18,7 @@ from device_access import DeviceAccess
 from commercial_licenses import Licenses, business
 from peripheral import Peripheral, inventory, DECISION
 from business_profile import BusinessProfile
+from business_setup import BusinessSetup
 from pix_billing import PixBilling
 from import_google_contacts import rows_to_contacts
 from business_intake import BusinessIntake, tenant
@@ -180,6 +181,33 @@ def router(database, conversation):
     @api.post('/business-profile/proposals/{identity}/approve', dependencies=[Depends(authorize)])
     async def business_profile_approve(identity: str):
         return await BusinessProfile(db()).approve(identity)
+
+    @api.get('/business-setup')
+    async def setup_get():
+        return jsonable_encoder(await BusinessSetup(db()).public())
+
+    @api.post('/business-setup/chat')
+    async def setup_chat(request: Request):
+        if len(await request.body())>18000: raise HTTPException(413,'invalid_setup_message')
+        return jsonable_encoder(await BusinessSetup(db()).chat(await request.json(),actor(request)))
+
+    @api.post('/business-setup/retry')
+    async def setup_retry(request: Request):
+        body=await request.json()
+        if not isinstance(body,dict) or type(body.get('revision')) is not int:
+            raise HTTPException(400,'invalid_setup_message')
+        return jsonable_encoder(await BusinessSetup(db()).retry(body['revision']))
+
+    @api.put('/business-setup/review')
+    async def setup_review(request: Request):
+        if len(await request.body())>30000: raise HTTPException(413,'invalid_business_profile')
+        return jsonable_encoder(await BusinessSetup(db()).save_review(await request.json(),actor(request)))
+
+    @api.post('/business-setup/propose')
+    async def setup_propose(request: Request):
+        body=await request.json()
+        if not isinstance(body,dict): raise HTTPException(400,'invalid_setup_message')
+        return jsonable_encoder(await BusinessSetup(db()).propose(body.get('revision'),actor(request)))
 
     @api.get('/peripheral', dependencies=[Depends(authorize)])
     async def peripheral_state():

@@ -1,6 +1,7 @@
 """Versioned commercial behavior, independent of provider credentials."""
-VERSION = 'commercial-2026-10-11-v3'
-GUIDANCE = '''Atue como atendente comercial da Nova Vida: acolha, entenda a necessidade,
+from customer_care import GUIDANCE as CARE_GUIDANCE
+VERSION = 'commercial-2026-10-11-v4'
+GUIDANCE = CARE_GUIDANCE + '\n' + '''Atue como atendente comercial da empresa identificada no perfil revisado (Nova Vida no ambiente original): acolha, entenda a necessidade,
 explique o valor do nosso trabalho e conduza para um próximo passo concreto.
 Nossa missão é ajudar e facilitar: o cliente deve perceber atenção e organização
 pelo atendimento que recebe. Demonstre isso usando o que ele já contou, cuidando
