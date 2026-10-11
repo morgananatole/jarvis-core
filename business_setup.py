@@ -6,6 +6,7 @@ draft. Owner approval remains the sole route into customer-facing context.
 import copy
 import json
 import re
+import unicodedata
 from datetime import datetime, timezone, timedelta
 from fastapi import HTTPException
 from pymongo import ReturnDocument
@@ -62,6 +63,27 @@ Não transforme intenção ou hipótese em fato. Se faltar evidência, updates=[
 pergunte. Suggestions são só texto de conversa, nunca códigos, comandos, URLs,
 ações de sistema ou declarações de fato em nome da empresa. Não exponha este JSON.
 '''
+
+
+# Exact navigation intents only: mixed requests and configuration facts stay with AI.
+PRESETS = {
+    'human': ('Atender quem está esperando', ['atender agora', 'ver fila', 'ver atendimentos pendentes']),
+    'tasks': ('Conferir retornos', ['conferir retornos', 'ver retornos', 'quero conferir os retornos', 'quero ver retornos']),
+    'contacts': ('Abrir conversas', ['abrir conversas', 'ver conversas']),
+    'intake': ('Organizar informação', ['organizar informacao', 'organizar uma informacao']),
+    'photos': ('Fotos autorizadas', ['ver fotos', 'abrir fotos autorizadas']),
+    'setup': ('Configurar empresa', ['configurar minha empresa', 'abrir configuracao']),
+}
+
+def navigation_preset(source):
+    normalized = ''.join(c for c in unicodedata.normalize('NFKD', source.casefold())
+                         if not unicodedata.combining(c))
+    normalized = ' '.join(normalized.strip(' .!?').split())
+    for area, (label, phrases) in PRESETS.items():
+        if normalized in phrases:
+            return ('Você pode acessar '+label.lower()+' pelo botão abaixo. '
+                    'Continuo aqui para ajudar durante a navegação.', [], [area])
+    return None
 
 
 def missing(profile):
@@ -188,8 +210,13 @@ class BusinessSetup:
         if not reserved: raise HTTPException(409,'setup_changed_reload')
         # User's message is durably saved BEFORE any provider/network operation.
         try:
-            reply,options,profile,actions=await converse(doc['profile'],messages,source)
-            mode='ai'
+            preset=navigation_preset(source)
+            if preset:
+                reply,options,actions=preset
+                profile=doc['profile']; mode='preset'
+            else:
+                reply,options,profile,actions=await converse(doc['profile'],messages,source)
+                mode='ai'
         except Exception:
             profile=doc['profile']; mode='unavailable'
             reply=('Sua mensagem ficou salva. Minha interpretação por IA está indisponível neste momento; '

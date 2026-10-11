@@ -108,6 +108,28 @@ class SetupTests(unittest.IsolatedAsyncioTestCase):
             result=await self.send('new_request_12345678',result['revision'])
         self.assertEqual(result['mode'],'unavailable');self.assertEqual(result['actions'],[])
 
+    async def test_navigation_preset_saves_without_any_provider_and_deduplicates(self):
+        self.source='Quero conferir os retornos!'
+        with patch('business_setup.provider_call',AsyncMock()) as provider:
+            result=await self.send()
+            again=await self.send()
+        provider.assert_not_awaited()
+        self.assertEqual(result,again)
+        self.assertEqual(result['mode'],'preset')
+        self.assertEqual(result['profile'],{})
+        self.assertEqual(result['actions'][0]['area'],'tasks')
+        recovered=await BusinessSetup(self.db).public()
+        self.assertEqual(recovered['messages'][1]['text'],self.source)
+        self.assertEqual(recovered['revision'],2)
+
+    async def test_mixed_navigation_and_business_facts_still_use_ai(self):
+        self.source='Quero conferir os retornos e somos Aurora'
+        self.answer['updates']=[]
+        with patch('business_setup.provider_call',AsyncMock(return_value=(json.dumps(self.answer),0))) as provider:
+            result=await self.send()
+        provider.assert_awaited_once()
+        self.assertEqual(result['mode'],'ai')
+
     async def test_private_api_requires_authorization(self):
         app=FastAPI();app.include_router(router(lambda:self.db,lambda db:None))
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),base_url='http://test') as client:
