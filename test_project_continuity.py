@@ -66,6 +66,7 @@ class DB:
     def __init__(self):
         self.project_continuity = Collection(self)
         self.project_continuity_entries = Collection(self)
+        self.project_continuity_links = Collection(self)
 
 
 class ContinuityTests(unittest.IsolatedAsyncioTestCase):
@@ -108,6 +109,11 @@ class ContinuityTests(unittest.IsolatedAsyncioTestCase):
         entries = await self.a.entries()
         self.assertEqual(len(entries), 2)
         self.assertEqual(revised['revises'], original['key'])
+        self.assertFalse(entries[1]['active'])
+        self.assertTrue(entries[0]['active'])
+        with self.assertRaises(VersionConflict):
+            await self.a.record({'kind': 'revised_directive', 'text': 'Outra revisão concorrente',
+                                 'key': 'idempotency_key_0045', 'revises': original['key']})
         self.assertEqual(entries[1]['text'], 'Manter roteamento da IA')
         with self.assertRaisesRegex(ValueError, 'revision_reference_required'):
             validate_entry({'kind': 'revised_directive', 'text': 'Novo', 'key': 'idempotency_key_0003'})
