@@ -354,7 +354,9 @@ async def _process_message(message):
         contact_menu = False
         direct_requested = contact_options.selected(message) or contact_options.requested(message['text']['body'])
         direct_info = await contact_options.contact(inbox.database) if direct_requested and not reason else None
-        if (profile.get('human_mode') or reason) and not assisting and not (direct_info and not profile.get('do_not_contact')):
+        if (profile.get('human_mode') or reason) and not assisting and not (
+                direct_info and not profile.get('do_not_contact')
+                and profile.get('human_takeover_source') != 'whatsapp_business_app'):
             new = await human.request(message['from'], message['id'], reason or 'human_conversation')
             if not new:
                 await inbox.update_one(guard, {'$set': {'state': 'human_waiting'}})

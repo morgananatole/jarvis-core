@@ -48,6 +48,7 @@ def utc(value):
 
 def can_assist(profile, queue):
     return bool(profile.get('ai_waiting_assist') and not profile.get('human_only')
+                and profile.get('human_takeover_source') != 'whatsapp_business_app'
                 and not profile.get('do_not_contact')
                 and profile.get('facts', {}).get('contact_permission', {}).get('value') != 'declined'
                 and queue and queue.get('state') in {'waiting', 'active'}
@@ -76,6 +77,8 @@ class WaitingService:
             now = self.clock()
             if not queue or not profile or not profile.get('human_mode'):
                 return {'state': 'not_waiting'}
+            if profile.get('human_takeover_source') == 'whatsapp_business_app':
+                return {'state': 'human_takeover'}
             if queue.get('state') not in {'waiting', 'active'}:
                 return {'state': 'not_waiting'}
             since = utc(queue.get('pending_since'))

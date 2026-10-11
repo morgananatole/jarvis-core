@@ -38,7 +38,10 @@ async def record_text_echo(db, echo):
         profile = await ContactMemory(db).ensure(echo['phone'])
         event = await db.contact_events.find_one({'_id': echo['id']})
         if event:
-            if event.get('contact_key') != profile['_id'] or event.get('source') != 'whatsapp_business_app':
+            if (event.get('contact_key') != profile['_id']
+                    or event.get('source') != 'whatsapp_business_app'
+                    or event.get('direction') != 'outbound'
+                    or event.get('text') != echo['text']):
                 raise ValueError('app_echo_id_collision')
             if event.get('app_sync_applied'): return
         await db.contact_events.update_one({'_id': echo['id']}, {'$setOnInsert': {
@@ -55,10 +58,14 @@ async def record_text_echo(db, echo):
             and (not control or echo['sent_at'] > control)
             and (not last_app or echo['sent_at'] >= last_app))
         if current:
-            await db.contacts.update_one({'_id': profile['_id']}, {'$set': {
-                'human_mode': True, 'human_since': profile.get('human_since') or echo['sent_at'],
-                'last_app_reply_at': echo['sent_at'], 'ai_waiting_assist': False},
-                '$inc': {'automation_epoch': 1}})
+            # Persist the ID atomically with takeover. A retry finishes queue/task
+            # effects without incrementing the epoch again (single-instance lock).
+            if profile.get('last_app_reply_id') != echo['id']:
+                await db.contacts.update_one({'_id': profile['_id']}, {'$set': {
+                    'human_mode': True, 'human_since': profile.get('human_since') or echo['sent_at'],
+                    'human_takeover_source': 'whatsapp_business_app',
+                    'last_app_reply_id': echo['id'], 'last_app_reply_at': echo['sent_at'],
+                    'ai_waiting_assist': False}, '$inc': {'automation_epoch': 1}})
             await db.human_requests.update_one({'_id': profile['_id']}, {'$set': {
                 'contact_no': profile['contact_no'], 'state': 'active', 'unread': False,
                 'pending_since': None, 'wait_notice_state': 'answered',
