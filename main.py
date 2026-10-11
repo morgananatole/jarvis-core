@@ -20,7 +20,8 @@ from openai import AsyncOpenAI
 from pymongo.errors import DuplicateKeyError, InvalidURI, ConfigurationError, OperationFailure
 from ai_router import ReplyRouter
 from contact_memory import ContactMemory, contact_key
-from human_service import HumanService, conversation_lock, takeover_reason
+from human_service import HumanService, conversation_lock, takeover_reason, exclusive_human
+from human_waiting import WaitingService, can_assist, SUPPORT_GUIDANCE, DIRECT_CONTACT
 from ai_router import UNAVAILABLE
 import knowledge_base
 import sales_policy
@@ -94,6 +95,7 @@ async def lifespan(app):
                 if inbox is not None:
                     from recovery import recover
                     await recover(inbox.database, process_message)
+                    await WaitingService(inbox.database, send_reply, authorized_test_sender).run_due()
                 if os.getenv('CONVERSATION_EXECUTOR_ENABLED', 'false') == 'true' and inbox is not None:
                     from datetime import datetime, timezone
                     tasks = await inbox.database.conversation_tasks.find({'state': 'approved', 'due_at': {'$lte': datetime.now(timezone.utc)}}).sort('due_at', 1).limit(10).to_list(10)
@@ -213,14 +215,15 @@ async def verify(request: Request):
     return PlainTextResponse(query["hub.challenge"])
 
 
-async def generate_reply(text, sender=None, source_message_id=None):
+async def generate_reply(text, sender=None, source_message_id=None, waiting_for_human=False):
+    support = '\n' + SUPPORT_GUIDANCE if waiting_for_human else ''
     if os.getenv("JARVIS_REPLY_MODE", "openai") == "test":
         return ("Sou o JARVIS, assistente virtual da Nova Vida. "
                 "Recebi sua mensagem: este é um teste de conexão com resposta fixa, "
                 "sem uso de IA paga. O atendimento automático ainda está em implantação.")
     if os.getenv("JARVIS_REPLY_MODE") == "hybrid":
         return await ReplyRouter(inbox.database).reply(sender, text,
-            "Você é JARVIS, assistente virtual da Nova Vida. Identifique-se como "
+            support + "Você é JARVIS, assistente virtual da Nova Vida. Identifique-se como "
             "assistente virtual. Responda em português, brevemente. Use o histórico "
             "para compreender a conversa. Não invente preços, disponibilidade ou "
             "agendamentos. Não faça diagnósticos. Quando faltar informação ou "
@@ -253,7 +256,7 @@ async def generate_reply(text, sender=None, source_message_id=None):
                           "e agradeça elogios explícitos. Não finja sentimentos ou intimidade, "
                           "não atribua culpa não comprovada, não invente lembranças, "
                           "não pressione o cliente.\n"
-                          + os.environ["JARVIS_INSTRUCTIONS"] + "\n" + knowledge_base.GUIDANCE + "\n" + sales_policy.GUIDANCE),
+                          + os.environ["JARVIS_INSTRUCTIONS"] + support + "\n" + knowledge_base.GUIDANCE + "\n" + sales_policy.GUIDANCE),
             input=prior_inputs, max_output_tokens=500)
         if not result.output_text.strip():
             raise RuntimeError("empty_ai_reply")
@@ -329,14 +332,29 @@ async def _process_message(message):
         profile = await memory.record_inbound(message["from"], message["id"], message["text"]["body"], timestamp)
         human = HumanService(inbox.database, send_reply, authorized_test_sender)
         reason = takeover_reason(message['text']['body'])
-        if profile.get('human_mode') or reason:
+        if exclusive_human(message['text']['body']):
+            await inbox.database.contacts.update_one({'_id': profile['_id']}, {'$set': {
+                'human_only': True, 'ai_waiting_assist': False}})
+            profile['human_only'] = True
+            reason = reason or 'customer_request'
+        queue = await inbox.database.human_requests.find_one({'_id': profile['_id']})
+        assisting = profile.get('human_mode') and not reason and can_assist(profile, queue)
+        if (profile.get('human_mode') or reason) and not assisting:
             new = await human.request(message['from'], message['id'], reason or 'human_conversation')
             if not new:
                 await inbox.update_one(guard, {'$set': {'state': 'human_waiting'}})
                 return
-            reply = 'Sua conversa está na fila de atendimento de Morgan. Você pode continuar por aqui; a IA ficará pausada enquanto ele atende.'
+            reply = ('Sua conversa está na fila de atendimento de Morgan. '
+                     'Se o atendimento demorar, volto para acompanhar sua espera. '
+                     'Você pode continuar por aqui; não tenho um horário confirmado para a resposta dele.\n\n'
+                     + DIRECT_CONTACT)
         else:
-            reply = await generate_reply(message["text"]["body"], message["from"], message["id"])
+            if assisting:
+                await inbox.database.human_requests.update_one({'_id': profile['_id']}, {'$set': {
+                    'unread': True, 'updated_at': now, 'source_message_id': message['id']}})
+                reply = await generate_reply(message["text"]["body"], message["from"], message["id"], waiting_for_human=True)
+            else:
+                reply = await generate_reply(message["text"]["body"], message["from"], message["id"])
             if reply == UNAVAILABLE:
                 await human.request(message['from'], message['id'], 'ai_unavailable')
         claimed = await inbox.find_one_and_update({**guard, 'state': 'processing'},
