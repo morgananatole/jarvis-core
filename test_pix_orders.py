@@ -10,7 +10,7 @@ from starlette.requests import Request
 from pix_billing import MercadoPago,PixBilling,signature
 import test_pix_billing as billing_tests
 
-ORDER={'id':'ORD01HRYFWNYRE1MR1E60MW3X0T2P','type':'online','total_amount':'29.90',
+ORDER={'user_id':123,'id':'ORD01HRYFWNYRE1MR1E60MW3X0T2P','type':'online','total_amount':'29.90',
  'external_reference':'reference','country_code':'BRA','status':'action_required','status_detail':'waiting_transfer',
  'transactions':{'payments':[{'id':'PAY01HRYFXQ53Q3JPEC48MYWMR0TE','amount':'29.90',
  'status':'action_required','status_detail':'waiting_transfer','payment_method':{'id':'pix','type':'bank_transfer',
@@ -56,7 +56,7 @@ class OrdersTests(unittest.IsolatedAsyncioTestCase):
             if path=='/users/me':return ACCOUNT
             if method=='POST':
                 raw['external_reference']=key
-                return {'id':raw['id'],'status':'processing'}
+                return {'id':raw['id'],'user_id':123,'status':'processing'}
             return raw
         provider.call=call;service=PixBilling(self.db,provider)
         order=await service.checkout(lic['license_id'],self.payer)
@@ -86,3 +86,49 @@ class OrdersTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(data['missing'],['MP_COLLECTOR_ID','BILLING_PUBLIC_BASE_URL'])
                 self.assertFalse(data['configured'])
                 self.assertNotIn(os.environ['MP_ACCESS_TOKEN'],response.text)
+
+    async def test_order_receiver_required_and_pinned(self):
+        for receiver in (None,999,True,''):
+            raw=copy.deepcopy(ORDER);raw['user_id']=receiver
+            with self.assertRaises(HTTPException) as error:
+                MercadoPago().normalize(raw,ACCOUNT,False)
+            self.assertEqual(error.exception.detail,'payment_receiver_mismatch')
+        raw=copy.deepcopy(ORDER);raw['user_id']='123'
+        self.assertEqual(MercadoPago().normalize(raw,ACCOUNT,False)['collector_id'],123)
+
+    async def test_sandbox_apro_opt_in_and_production_guard(self):
+        body={'transaction_amount':50,'external_reference':'reference','payer':{'email':'test_user_br@testuser.com'}}
+        provider=MercadoPago()
+        with patch.dict(os.environ,{'BILLING_MP_SANDBOX_APRO':'true'}):
+            provider.call=AsyncMock(side_effect=[ACCOUNT,copy.deepcopy(ORDER)])
+            await provider.create(body,'key')
+            self.assertEqual(provider.call.call_args.args[2]['payer']['first_name'],'APRO')
+            provider.call=AsyncMock(return_value=ACCOUNT)
+            with self.assertRaises(HTTPException):
+                await provider.create({**body,'transaction_amount':1},'key')
+            self.assertEqual(provider.call.await_count,1)
+            with patch.dict(os.environ,{'BILLING_MP_LIVE_MODE':'true'}):
+                provider.call=AsyncMock(return_value={**ACCOUNT,'tags':[]})
+                with self.assertRaises(HTTPException) as error:await provider.create(body,'key')
+                self.assertEqual(error.exception.detail,'sandbox_approval_requires_test_environment')
+                self.assertEqual(provider.call.await_count,1)
+        with patch.dict(os.environ,{'BILLING_MP_SANDBOX_APRO':'false'}):
+            provider.call=AsyncMock(side_effect=[ACCOUNT,copy.deepcopy(ORDER)])
+            await provider.create(body,'key')
+            self.assertNotIn('first_name',provider.call.call_args.args[2]['payer'])
+
+    async def test_diagnostic_rejects_environment_and_invalid_configuration(self):
+        import httpx
+        from fastapi import FastAPI
+        from pix_billing import billing_router
+        app=FastAPI();app.include_router(billing_router(lambda:self.db))
+        with patch.object(MercadoPago,'call',AsyncMock(return_value=ACCOUNT)):
+            async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),base_url='https://jarvis.test') as client:
+                for env,reason in (({'BILLING_MP_LIVE_MODE':'true'},'payment_environment_mismatch'),
+                    ({'BILLING_MP_LIVE_MODE':'invalid'},'invalid_live_mode'),
+                    ({'BILLING_PUBLIC_BASE_URL':'http://test.invalid'},'invalid_public_base_url')):
+                    with patch.dict(os.environ,env):
+                        data=(await client.get('/billing/connection',headers={'Authorization':'Bearer '+os.environ['CRM_ADMIN_TOKEN']})).json()
+                        self.assertFalse(data['configured']);self.assertIn(reason,data['errors'])
+                data=(await client.get('/billing/connection',headers={'Authorization':'Bearer '+os.environ['CRM_ADMIN_TOKEN']})).json()
+                self.assertTrue(data['configured']);self.assertTrue(data['environment_matches'])

@@ -34,7 +34,9 @@ class DeviceAccess:
             raise HTTPException(400, 'invalid_device_name')
         if license_id is not None:
             from commercial_licenses import Licenses
-            await Licenses(self.db).active(license_id)
+            record = await Licenses(self.db).active(license_id, allow_prepared=True)
+            if record['kind'] == 'trial_hour' and record.get('started_at') is not None:
+                raise HTTPException(409, 'trial_already_started')
         code = secrets.token_urlsafe(32)
         now = datetime.now(timezone.utc)
         await self.db.device_codes.insert_one({'_id': digest(code), 'label': label.strip(),
@@ -64,7 +66,7 @@ class DeviceAccess:
             raise
         return {'device_id': identity}
 
-    async def verify(self, request, allow_expired=False):
+    async def verify(self, request, allow_expired=False, allow_prepared=False):
         identity = request.headers.get('x-jarvis-device', '')
         stamp = request.headers.get('x-jarvis-time', '')
         nonce = request.headers.get('x-jarvis-nonce', '')
@@ -89,6 +91,6 @@ class DeviceAccess:
             raise HTTPException(401, 'device_authentication_failed') from None
         if device.get('license_id'):
             from commercial_licenses import Licenses
-            license = await Licenses(self.db).active(device['license_id'], allow_expired=allow_expired)
+            license = await Licenses(self.db).active(device['license_id'], allow_expired=allow_expired, allow_prepared=allow_prepared)
             if identity not in license['devices']: raise HTTPException(403, 'license_device_not_authorized')
         return identity
