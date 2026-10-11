@@ -79,6 +79,7 @@ def navigation_preset(source):
     normalized = ''.join(c for c in unicodedata.normalize('NFKD', source.casefold())
                          if not unicodedata.combining(c))
     normalized = ' '.join(normalized.strip(' .!?').split())
+    normalized = re.sub(r'^jarvis[,:]?\s+', '', normalized)
     for area, (label, phrases) in PRESETS.items():
         if normalized in phrases:
             return ('Você pode acessar '+label.lower()+' pelo botão abaixo. '
