@@ -36,3 +36,11 @@ usar contexto, acompanhar pendências, facilitar o próximo passo e verificar o
 resultado. Não substituir isso por slogans, porte empresarial inventado ou
 links enviados antes de compreender a necessidade. Ideias do proprietário
 permanecem classificadas como ideias até decisão expressa; manter foco na entrega.
+
+## Referencial permanente de experiência
+Aplicar `docs/CONTRATO_EXPERIENCIA.md` e `docs/IA_EMPRESA_E_ATENDIMENTO.md`.
+Separar IA privada da empresa/configuração da IA de atendimento ao cliente.
+Conversa natural é o centro; exemplos são referências de tom, nunca roteiros
+obrigatórios. Botões contextuais nascem na caixa e levam à função permitida, com
+a assistente acompanhando a navegação interna. Não chamar animação de voz real,
+rascunho de perfil ativo, teste simulado de entrega real ou licença de isolamento.
