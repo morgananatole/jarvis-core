@@ -21,6 +21,7 @@ from business_profile import BusinessProfile
 from pix_billing import PixBilling
 from import_google_contacts import rows_to_contacts
 from business_intake import BusinessIntake, tenant
+from project_continuity import ContinuityJournal, VersionConflict
 
 
 def authorize(request: Request):
@@ -84,6 +85,25 @@ def router(database, conversation):
             return jsonable_encoder(await BusinessIntake(db()).review_date(identity, body.get('index'), body.get('due_at'), body.get('phone'), actor(request), body.get('purpose')))
         except ValueError as error:
             raise HTTPException(409, str(error))
+
+    # Private project ideas, distinct from customer/clinical intake.
+    # The owner-only dependency prevents licensed staff devices from reading strategy.
+    @api.get('/continuity', dependencies=[Depends(authorize)])
+    async def continuity_get():
+        return jsonable_encoder(await ContinuityJournal(db(), tenant()).current())
+
+    @api.post('/continuity', dependencies=[Depends(authorize)])
+    async def continuity_save(request: Request):
+        raw = await request.body()
+        if len(raw) > 32768:
+            raise HTTPException(413, 'continuity_too_large')
+        try:
+            body = await request.json()
+            return jsonable_encoder(await ContinuityJournal(db(), tenant()).save(body))
+        except VersionConflict as error:
+            raise HTTPException(409, str(error)) from None
+        except (ValueError, TypeError):
+            raise HTTPException(400, 'invalid_continuity') from None
 
     @api.get('/business/events')
     async def business_events():
