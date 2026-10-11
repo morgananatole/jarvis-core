@@ -2,7 +2,7 @@
 import os
 import re
 import secrets
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from fastapi import HTTPException
 from device_access import digest
 
@@ -31,13 +31,18 @@ class Licenses:
         label = body.get('label', '')
         if not isinstance(label, str) or not label.strip() or len(label) > 120:
             raise HTTPException(400, 'invalid_license_label')
-        expires = expiration(body.get('expires_at')) if kind == 'subscription' else None
+        trial_days = body.get('trial_days')
+        if trial_days is not None:
+            if type(trial_days) is not int or trial_days != 30 or kind != 'subscription' or body.get('expires_at') is not None:
+                raise HTTPException(400, 'invalid_30_day_trial')
+        expires = (datetime.now(timezone.utc) + timedelta(days=30) if trial_days == 30
+                   else expiration(body.get('expires_at')) if kind == 'subscription' else None)
         identity, key = secrets.token_hex(16), secrets.token_urlsafe(32)
         await self.db.commercial_licenses.insert_one({'_id': identity, 'business_id': business(),
             'label': label.strip(), 'kind': kind, 'expires_at': expires, 'key_hash': digest(key),
-            'max_devices': seats, 'devices': [], 'revoked': False, 'created_at': datetime.now(timezone.utc)})
+            'max_devices': seats, 'devices': [], 'revoked': False, 'trial_days': trial_days, 'created_at': datetime.now(timezone.utc)})
         return {'license_id': identity, 'activation_key': key, 'kind': kind, 'expires_at': expires,
-            'max_devices': seats, 'note': 'Save this key now; it is displayed once.'}
+            'max_devices': seats, 'trial_days': trial_days, 'note': 'Save this key now; it is displayed once.'}
 
     async def active(self, identity, allow_expired=False):
         if not isinstance(identity, str) or not re.fullmatch(r'[0-9a-f]{32}', identity):
