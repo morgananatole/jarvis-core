@@ -77,7 +77,7 @@ class ContinuityTests(unittest.IsolatedAsyncioTestCase):
                                      'revision': one['revision']})
         self.assertEqual(one['revision'], 16)
         self.assertEqual(len(one['history']), 12)
-        self.assertIn('Primeira ideia', str(self.db.project_continuity.docs))
+        self.assertEqual(one['history'][0]['revision'], 4)
         self.assertEqual((await self.a.current())['content'], 'Versão 14')
 
     async def test_stale_tabs_cannot_erase_newer_decisions(self):
