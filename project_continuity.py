@@ -90,6 +90,18 @@ class ContinuityJournal:
                                               'owner': self.key})
             if not previous or previous['kind'] not in ('directive', 'revised_directive'):
                 raise ValueError('unknown_prior_directive')
+        # Claim this predecessor atomically by MongoDB _id. Two competing revisions
+        # cannot both replace the same directive, even across devices.
+        if data['kind'] == 'revised_directive':
+            links = self.collection.database.project_continuity_links
+            link = {'_id': self.key + ':' + data['revises'],
+                    'owner': self.key, 'next_key': data['key']}
+            try:
+                await links.insert_one(link)
+            except DuplicateKeyError:
+                previous_link = await links.find_one({'_id': link['_id'], 'owner': self.key})
+                if not previous_link or previous_link['next_key'] != data['key']:
+                    raise VersionConflict('directive_already_revised') from None
         try:
             await events.insert_one(item)
         except DuplicateKeyError:
@@ -107,7 +119,10 @@ class ContinuityJournal:
         cursor = (self.collection.database.project_continuity_entries
                   .find({'owner': self.key}).sort('created_at', -1).limit(50))
         records = await cursor.to_list(length=50)
-        return [self._event_public(item) for item in records]
+        superseded = {item['revises'] for item in records if item.get('revises')}
+        return [{**self._event_public(item),
+                 'active': item['key'] not in superseded}
+                for item in records]
 
 
 KINDS = {
