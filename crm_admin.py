@@ -212,6 +212,11 @@ def router(database, conversation):
         if not result.matched_count: raise HTTPException(404, 'license_not_found')
         return {'revoked': True}
 
+    @api.get('/whatsapp/operations', dependencies=[Depends(authorize)])
+    async def whatsapp_operations():
+        from whatsapp_operations import operations
+        return jsonable_encoder(await operations(db()))
+
     @api.get('/whatsapp/connection', dependencies=[Depends(authorize)])
     async def whatsapp_connection():
         from whatsapp_connection import diagnostic
