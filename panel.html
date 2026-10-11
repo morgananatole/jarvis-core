@@ -89,11 +89,11 @@ function continuityShowEntries(){
  const names={idea:'Ideia',directive:'Diretriz',proposal:'Sugestão técnica',verified:'Fato verificado',revised_directive:'Diretriz revisada'};
  for(const x of continuityEntries){
   const article=document.createElement('article');
-  text(article,(names[x.kind]||x.kind)+' · '+new Date(x.created_at).toLocaleString('pt-BR'),'muted');
+  text(article,(names[x.kind]||x.kind)+(x.active===false?' · SUBSTITUÍDA':'')+' · '+new Date(x.created_at).toLocaleString('pt-BR'),'muted');
   text(article,x.text);
   if(x.revises)text(article,'Revisa o registro '+x.revises,'muted');
   root.append(article);
-  if(x.kind==='directive'||x.kind==='revised_directive'){
+  if(x.active!==false&&(x.kind==='directive'||x.kind==='revised_directive')){
    const option=document.createElement('option');option.value=x.key;
    option.textContent=(x.text.length>90?x.text.slice(0,90)+'…':x.text);
    select.append(option);
