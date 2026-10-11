@@ -4,6 +4,7 @@ import os
 import re
 import unicodedata
 import weakref
+import uuid
 from datetime import datetime, timedelta, timezone
 from pymongo.errors import DuplicateKeyError
 from contact_memory import ContactMemory, contact_key
@@ -40,6 +41,13 @@ def active_window(profile, now=None):
     return bool(last and now - timedelta(hours=23) < last <= now)
 
 
+def exclusive_human(text):
+    value = ''.join(c for c in unicodedata.normalize('NFD', text.casefold())
+                    if unicodedata.category(c) != 'Mn')
+    return bool(re.search(r'\b(?:so|somente|apenas)\s+(?:um\s+)?(?:humano|atendente|morgan)\b|'
+                          r'\bnao quero (?:falar|conversar) com (?:a )?(?:ia|robo|assistente virtual)\b', value))
+
+
 class HumanService:
     def __init__(self, db, send, tester):
         self.db, self.send, self.tester = db, send, tester
@@ -49,12 +57,26 @@ class HumanService:
         now = datetime.now(timezone.utc)
         # Called inside the contact lock by the webhook/operator.
         new = not profile.get('human_mode')
+        prior = await self.db.human_requests.find_one({'_id': profile['_id']}) or {}
+        waiting = {}
+        if new or not prior.get('pending_since') or (profile.get('ai_waiting_assist') and reason != 'human_conversation'):
+            since = (profile.get('human_since') or now) if (
+                not new and 'pending_since' not in prior and prior.get('state') == 'waiting') else now
+            waiting = {'pending_since': since, 'wait_episode': source_id,
+                       'wait_notice_state': 'pending'}
+        if reason != 'human_conversation':
+            await self.db.contacts.update_one({'_id': profile['_id']}, {'$set': {
+                'ai_waiting_assist': False}})
+        # New messages must not restart the five-minute clock or erase urgency.
+        queue_reason = prior.get('reason', reason) if reason == 'human_conversation' else reason
+        if prior.get('reason') == 'urgent' and not new:
+            queue_reason = 'urgent'
         if new:
             await self.db.contacts.update_one({'_id': profile['_id']}, {'$set': {
                 'human_mode': True, 'human_since': now}, '$inc': {'automation_epoch': 1}})
         await self.db.human_requests.update_one({'_id': profile['_id']}, {'$set': {
-            'contact_no': profile['contact_no'], 'reason': reason,
-            'source_message_id': source_id, 'updated_at': now, 'unread': True},
+            'contact_no': profile['contact_no'], 'reason': queue_reason,
+            'source_message_id': source_id, 'updated_at': now, 'unread': True, **waiting},
             '$max': {'priority': 90 if reason == 'urgent' else 40},
             '$setOnInsert': {'created_at': now, 'state': 'waiting'}}, upsert=True)
         # A resolved queue item can be reused by a new customer request.
@@ -75,7 +97,11 @@ class HumanService:
                 '$inc': {'automation_epoch': 1}})
             await self.db.human_requests.update_one({'_id': profile['_id']}, {'$set': {
                 'state': 'active' if human else 'resolved', 'contact_no': number,
-                'unread': False, 'updated_at': datetime.now(timezone.utc)}}, upsert=True)
+                'unread': False, 'updated_at': datetime.now(timezone.utc),
+                'pending_since': datetime.now(timezone.utc) if human else None,
+                'wait_episode': uuid.uuid4().hex, 'wait_notice_state': 'pending' if human else 'cancelled'}}, upsert=True)
+            await self.db.contacts.update_one({'_id': profile['_id']}, {'$set': {
+                'ai_waiting_assist': False}})
         return {'mode': 'human' if human else 'jarvis'}
 
     async def reply(self, number, text, nonce):
@@ -102,13 +128,23 @@ class HumanService:
             except DuplicateKeyError:
                 prior = await self.db.operator_jobs.find_one({'_id': job_id})
                 return {'state': prior['state'], 'duplicate': True}
+            await self.db.contacts.update_one({'_id': profile['_id']}, {'$set': {
+                'ai_waiting_assist': False}})
             try:
                 mid = await self.send(profile['phone'], text.strip())
                 await ContactMemory(self.db).record_outbound(profile['phone'], mid, text.strip())
                 await self.db.contact_events.update_one({'_id': mid}, {'$set': {'operator': True}})
                 await self.db.operator_jobs.update_one({'_id': job_id}, {'$set': {'state': 'accepted', 'outbound_id': mid}})
                 await self.db.human_requests.update_one({'_id': profile['_id']}, {'$set': {'unread': False}})
+                await self.db.human_requests.update_one({'_id': profile['_id']}, {'$set': {
+                    'pending_since': None, 'wait_notice_state': 'answered',
+                    'last_operator_reply_at': datetime.now(timezone.utc)}})
+                await self.db.contacts.update_one({'_id': profile['_id']}, {'$set': {
+                    'ai_waiting_assist': False}})
                 return {'state': 'accepted'}
             except Exception:
                 await self.db.operator_jobs.update_one({'_id': job_id}, {'$set': {'state': 'review_required'}})
+                await self.db.human_requests.update_one({'_id': profile['_id']}, {'$set': {
+                    'pending_since': None, 'wait_notice_state': 'review_required',
+                    'reason': 'reply_failed_or_uncertain', 'unread': True}})
                 return {'state': 'review_required'}
