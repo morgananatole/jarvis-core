@@ -11,6 +11,9 @@ import main
 class InstallationTests(unittest.TestCase):
     def test_manifest_and_worker_allow_online_app_without_caching_private_data(self):
         client = TestClient(main.app)
+        panel = client.get('/painel')
+        self.assertIn("worker-src 'self'", panel.headers['content-security-policy'])
+        self.assertIn("script-src 'unsafe-inline'", panel.headers['content-security-policy'])
         manifest = client.get('/app.webmanifest')
         self.assertEqual(manifest.status_code, 200)
         self.assertEqual(manifest.json()['start_url'], '/painel')
