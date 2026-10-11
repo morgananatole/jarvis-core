@@ -43,3 +43,15 @@ concorrência de dois requests, replay, reinício do serviço, vencimento no lim
 revogação e negação em outra empresa. Confirmar acesso interno e institucional
 intactos. Reversão: reverter commit em caso de falha; não apagar registros nem
 reativar testes já iniciados. Não confundir uma hora de uso com QR Pix PT1H.
+
+Integração real MongoDB (11/10/2026): `test_hour_trials_mongo.py` exige
+`PULSE_TEST_MONGO_URI=mongodb://127.0.0.1:27029` e recusa destinos externos,
+credenciais e bancos de produção. Cada teste cria e remove somente seu banco
+aleatório `pulse_test_*`. Valida 32 inícios simultâneos com prazo único de 3600s,
+16 inscrições disputando um assento, 16 repetições disputando um nonce,
+reconexão preservando o prazo, expiração, revogação, troca de empresa/dispositivo,
+acesso interno/permanente e rotas HTTP de validação/início assinado.
+O workflow Functional tests sobe MongoDB 8.0.4 isolado para repetir esses checks.
+Execução local verificada: 211 testes passaram, incluindo os oito testes de
+integração MongoDB sem skips; nenhuma conta externa foi acessada pelos testes.
+Não prova reinício do processo MongoDB, WhatsApp, Mercado Pago nem navegador Android.
