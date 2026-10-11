@@ -55,8 +55,14 @@ el('checkWhatsappOperations').onclick=async()=>{
   let mode=d.reply_mode==='hybrid'?'IA gratuita com alternativa paga controlada':d.reply_mode==='test'?'Teste sem IA':d.reply_mode==='openai'?'IA paga como modo principal':'Modo desconhecido';
   let last=d.most_recent_inbound_at?new Date(d.most_recent_inbound_at).toLocaleString('pt-BR'):'nenhuma entrada registrada';
   let reply=d.last_meta_accepted_reply_inbound_at?new Date(d.last_meta_accepted_reply_inbound_at).toLocaleString('pt-BR'):'sem aceite documentado nas últimas 40 entradas';
+  const namedState={sent:'resposta aceita pela Meta',processing:'em processamento',sending:'enviando',human_waiting:'atendimento humano pendente',review_required:'revisão humana necessária'};
+  const namedDelivery={no_accepted_reply:'nenhum envio aceito para a última entrada',read:'mensagem lida conforme recibo Meta',delivered:'mensagem entregue conforme recibo Meta',failed:'FALHA de entrega registrada pela Meta',sent_not_confirmed_delivered:'enviada, mas entrega não confirmada',awaiting_delivery_receipt:'envio aceito; sem recibo de entrega registrado'};
+  const state=(namedState[d.recent_message_state]||d.recent_message_state||'não identificado');
+  const delivery=(namedDelivery[d.recent_message_delivery_state]||'não identificado');
+
   el('whatsappOperations').textContent='Modo: '+mode+'. '+(d.test_only?'Atendimento restrito a número de teste.':'Restrição de número de teste não identificada.')+
    ' Última mensagem recebida: '+last+'. Última resposta aceita pela Meta (referência à entrada): '+reply+
+   '. Estado da última mensagem: '+state+'. Comprovação de entrega: '+delivery+
    '. Revisões necessárias nas últimas 40 entradas: '+d.review_required_in_last_40+
    '. Retornos automáticos: '+(d.followups_automatic_enabled?'ligados':'desligados')+'. '+d.note;
  }catch(e){el('whatsappOperations').textContent=e.message}
