@@ -35,6 +35,8 @@ vm.runInContext(`el('workspace').hidden=false;token='fake-owner';setupRender({re
  assert.equal(ids.setupActions.children[1].tagName,'a');
  assert.equal(ids.setupActions.children[1].href,'tel:+5511999999999');
  assert.equal(ids.setupActions.children[1].textContent,'Ligar para o responsável');
+ assert.equal(ids.setupActions.children[0].children[0].className,'preset-icon');
+ assert.equal(ids.setupActions.children[1].children.length,1);
  assert.equal(ids.setupChat.children.length,2);
  const shell=ids.setupShell;await ids.setupActions.children[0].onclick();
  assert.equal(shell.parentElement,ids.setupFloatBody);assert.equal(ids.setupFloating.hidden,false);
