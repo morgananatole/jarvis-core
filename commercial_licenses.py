@@ -26,8 +26,10 @@ class Licenses:
     async def issue(self, body):
         if not isinstance(body, dict): raise HTTPException(400, 'invalid_license')
         kind, seats = body.get('kind'), body.get('max_devices', 1)
-        if kind not in ('subscription', 'permanent') or type(seats) is not int or not 1 <= seats <= 100:
+        if kind not in ('subscription', 'permanent', 'trial_hour') or type(seats) is not int or not 1 <= seats <= 100:
             raise HTTPException(400, 'invalid_license_kind_or_device_limit')
+        if kind == 'trial_hour' and (seats != 1 or body.get('expires_at') is not None or body.get('trial_days') is not None):
+            raise HTTPException(400, 'invalid_hour_trial')
         label = body.get('label', '')
         if not isinstance(label, str) or not label.strip() or len(label) > 120:
             raise HTTPException(400, 'invalid_license_label')
@@ -38,38 +40,53 @@ class Licenses:
         expires = (datetime.now(timezone.utc) + timedelta(days=30) if trial_days == 30
                    else expiration(body.get('expires_at')) if kind == 'subscription' else None)
         identity, key = secrets.token_hex(16), secrets.token_urlsafe(32)
-        await self.db.commercial_licenses.insert_one({'_id': identity, 'business_id': business(),
+        record = {'_id': identity, 'business_id': business(),
             'label': label.strip(), 'kind': kind, 'expires_at': expires, 'key_hash': digest(key),
-            'max_devices': seats, 'devices': [], 'revoked': False, 'trial_days': trial_days, 'created_at': datetime.now(timezone.utc)})
+            'max_devices': seats, 'devices': [], 'revoked': False, 'trial_days': trial_days, 'created_at': datetime.now(timezone.utc)}
+        if kind == 'trial_hour':
+            record.update(trial_state='prepared', started_at=None, validation=None)
+        await self.db.commercial_licenses.insert_one(record)
         return {'license_id': identity, 'activation_key': key, 'kind': kind, 'expires_at': expires,
             'max_devices': seats, 'trial_days': trial_days, 'note': 'Save this key now; it is displayed once.'}
 
-    async def active(self, identity, allow_expired=False):
+    async def active(self, identity, allow_expired=False, allow_prepared=False):
         if not isinstance(identity, str) or not re.fullmatch(r'[0-9a-f]{32}', identity):
             raise HTTPException(400, 'invalid_license_id')
         record = await self.db.commercial_licenses.find_one({'_id': identity, 'business_id': business(), 'revoked': False})
         if not record: raise HTTPException(403, 'license_revoked_or_missing')
         if not allow_expired and record['kind'] == 'subscription' and record['expires_at'] <= datetime.now(timezone.utc):
             raise HTTPException(403, 'license_expired')
+        if record['kind'] == 'trial_hour':
+            if record.get('started_at') is None:
+                if not allow_prepared: raise HTTPException(403, 'trial_not_started')
+            elif not allow_expired and record['expires_at'] <= datetime.now(timezone.utc):
+                raise HTTPException(403, 'trial_expired')
         return record
 
     async def reserve(self, identity, key, device):
-        record = await self.active(identity)
+        record = await self.active(identity, allow_prepared=True)
         if not isinstance(key, str) or len(key) > 100 or not secrets.compare_digest(digest(key), record['key_hash']):
             raise HTTPException(403, 'invalid_license_key')
         # One atomic update enforces the seat limit even with simultaneous enrollments.
         query = {'_id': identity, 'business_id': business(), 'revoked': False,
             '$expr': {'$lt': [{'$size': '$devices'}, '$max_devices']}}
         if record['kind'] == 'subscription': query['expires_at'] = {'$gt': datetime.now(timezone.utc)}
+        if record['kind'] == 'trial_hour': query['started_at'] = None
         reserved = await self.db.commercial_licenses.find_one_and_update(query, {'$push': {'devices': device}}, return_document=True)
         if not reserved: raise HTTPException(403, 'license_expired_revoked_or_device_limit')
 
     async def release(self, identity, device):
-        await self.db.commercial_licenses.update_one({'_id': identity, 'business_id': business()}, {'$pull': {'devices': device}})
+        update = {'$pull': {'devices': device}}
+        record = await self.db.commercial_licenses.find_one({'_id': identity, 'business_id': business()})
+        if record and record['kind'] == 'trial_hour':
+            # A replacement device needs a new validation; a used trial never resets.
+            update['$set'] = {'validation': None}
+        await self.db.commercial_licenses.update_one({'_id': identity, 'business_id': business()}, update)
 
     async def renew(self, identity, body):
         record = await self.db.commercial_licenses.find_one({'_id': identity, 'business_id': business()})
         if not record: raise HTTPException(404, 'license_not_found')
+        if record['kind'] == 'trial_hour': raise HTTPException(409, 'hour_trial_has_no_renewal')
         if record['kind'] != 'subscription': raise HTTPException(409, 'permanent_license_has_no_renewal')
         expires = expiration(body.get('expires_at'))
         if expires <= record['expires_at']: raise HTTPException(400, 'renewal_must_extend_validity')

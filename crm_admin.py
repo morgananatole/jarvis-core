@@ -234,6 +234,17 @@ def router(database, conversation):
     async def license_renew(identity: str, request: Request):
         return jsonable_encoder(await Licenses(db()).renew(identity, await request.json()))
 
+    @api.post('/licenses/{identity}/validate-trial', dependencies=[Depends(authorize)])
+    async def validate_trial(identity: str, request: Request):
+        from pulse_trials import HourTrials
+        if len(await request.body()) > 2048: raise HTTPException(413, 'Payload too large')
+        return jsonable_encoder(await HourTrials(db()).validate(identity, await request.json()))
+
+    @api.get('/trial-version', dependencies=[Depends(authorize)])
+    async def trial_version():
+        from pulse_trials import release_version
+        return {'version': release_version()}
+
     @api.post('/licenses/{identity}/revoke', dependencies=[Depends(authorize)])
     async def license_revoke(identity: str):
         result = await db().commercial_licenses.update_one({'_id': identity, 'business_id': business()}, {'$set': {'revoked': True, 'revoked_at': datetime.now(timezone.utc)}})
@@ -439,6 +450,26 @@ def panel():
 
 def enrollment_router(database):
     api = APIRouter()
+    async def trial_device(request):
+        value = database()
+        if value is None: raise HTTPException(503, 'Database unavailable')
+        identity = await DeviceAccess(value).verify(request, allow_expired=True, allow_prepared=True)
+        return value, identity
+
+    @api.get('/device/trial')
+    async def trial_status(request: Request):
+        from pulse_trials import HourTrials
+        value, identity = await trial_device(request)
+        _, status = await HourTrials(value).for_device(identity)
+        return jsonable_encoder(status)
+
+    @api.post('/device/trial/start')
+    async def trial_start(request: Request):
+        from pulse_trials import HourTrials
+        if len(await request.body()) > 1024: raise HTTPException(413, 'Payload too large')
+        value, identity = await trial_device(request)
+        return jsonable_encoder(await HourTrials(value).start(identity, await request.json()))
+
     @api.post('/device/enroll')
     async def enroll(request: Request):
         raw = await request.body()

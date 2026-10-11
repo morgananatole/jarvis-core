@@ -66,7 +66,12 @@ class MercadoPago:
         if live is not (os.getenv('BILLING_MP_LIVE_MODE','true')=='true'):
             raise HTTPException(409,'payment_environment_mismatch')
         return account,live
+    def verify_order_receiver(self,data,account):
+        receiver=data.get('user_id')
+        if type(receiver) not in (int,str) or str(receiver)!=str(account['id']):
+            raise HTTPException(409,'payment_receiver_mismatch')
     def normalize(self,data,account,live):
+        self.verify_order_receiver(data,account)
         payments=data.get('transactions',{}).get('payments',[])
         if len(payments)!=1:raise HTTPException(409,'invalid_order_transactions')
         payment=payments[0];method=payment.get('payment_method',{})
@@ -94,7 +99,15 @@ class MercadoPago:
         payload={'type':'online','total_amount':amount,'external_reference':body['external_reference'],
             'processing_mode':'automatic','payer':{'email':body['payer']['email']},
             'transactions':{'payments':[{'amount':amount,'payment_method':{'id':'pix','type':'bank_transfer'},'expiration_time':'PT1H'}]}}
+        # Explicit opt-in in an isolated test deployment; never accept APRO from clients.
+        if os.getenv('BILLING_MP_SANDBOX_APRO','false')=='true':
+            if live or os.getenv('BILLING_MP_LIVE_MODE')!='false':
+                raise HTTPException(409,'sandbox_approval_requires_test_environment')
+            if amount!='50.00' or body['payer']['email']!='test_user_br@testuser.com':
+                raise HTTPException(400,'invalid_sandbox_approval_fixture')
+            payload['payer']['first_name']='APRO'
         data=await self.call('POST','/v1/orders',payload,key)
+        self.verify_order_receiver(data,account)
         if data.get('status')=='processing' and not data.get('transactions',{}).get('payments'):
             return {'id':data['id']}
         return self.normalize(data,account,live)
@@ -136,7 +149,8 @@ class PixBilling:
         email,cpf=body.get('email',''),body.get('cpf','')
         if not isinstance(email,str) or not re.fullmatch(r'[^\s@]{1,100}@[^\s@]{1,100}\.[^\s@]{2,30}',email):raise HTTPException(400,'invalid_payer')
         if not isinstance(cpf,str) or not re.fullmatch(r'[0-9]{11}',cpf):raise HTTPException(400,'invalid_payer')
-        # Payer details travel to the provider; the app retains no CPF/email in orders.
+        # Orders forwards email only; CPF remains a legacy checkout requirement.
+        # Orders retain only a combined payer hash, never plaintext CPF/email.
         for _ in range(3):
             lic=await self.license(identity)
             if lic['kind']!='subscription':raise HTTPException(409,'permanent_license_has_no_charge')
@@ -251,11 +265,25 @@ def billing_router(database):
     async def connection(request:Request):
         authorize(request)
         missing=[k for k in ('MP_ACCESS_TOKEN','MP_WEBHOOK_SECRET','MP_COLLECTOR_ID','BILLING_PUBLIC_BASE_URL') if not os.getenv(k)]
-        result={'configured':bool(configured()),'missing':missing,'receiver_id':None,'receiver_matches':False}
+        mode=os.getenv('BILLING_MP_LIVE_MODE','true')
+        errors=[]
+        if mode not in ('true','false'):errors.append('invalid_live_mode')
+        if os.getenv('BILLING_PUBLIC_BASE_URL') and not os.environ['BILLING_PUBLIC_BASE_URL'].startswith('https://'):
+            errors.append('invalid_public_base_url')
+        if os.getenv('BILLING_MP_SANDBOX_APRO','false')=='true' and mode!='false':
+            errors.append('sandbox_approval_requires_test_environment')
+        result={'configured':False,'configuration_complete':bool(configured()),'missing':missing,
+            'receiver_id':None,'receiver_matches':False,'environment_matches':False,
+            'expected_live_mode':mode=='true' if mode in ('true','false') else None,'errors':errors}
         if os.getenv('MP_ACCESS_TOKEN'):
             account=await MercadoPago().call('GET','/users/me',diagnostic=True)
             result.update(receiver_id=str(account.get('id','')),receiver_matches=str(account.get('id'))==os.getenv('MP_COLLECTOR_ID'),
                 brazil_account=account.get('site_id')=='MLB',live_mode='test_user' not in account.get('tags',[]))
+            result['environment_matches']=mode in ('true','false') and result['live_mode']==(mode=='true')
+            if not result['environment_matches']:errors.append('payment_environment_mismatch')
+            if not result['receiver_matches']:errors.append('payment_receiver_mismatch')
+            if not result['brazil_account']:errors.append('payment_receiver_not_brazilian')
+        result['configured']=result['configuration_complete'] and not errors and result['environment_matches'] and result['receiver_matches']
         return result
     @api.get('/account')
     async def account(request:Request):return jsonable_encoder(await PixBilling(db()).account(await identity(request)))
