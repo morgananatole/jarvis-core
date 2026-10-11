@@ -10,6 +10,18 @@ jobs:
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    services:
+      mongodb:
+        image: mongo:8.0.4
+        ports:
+          - 27029:27017
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.adminCommand({ping:1})'"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      PULSE_TEST_MONGO_URI: mongodb://127.0.0.1:27029
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
