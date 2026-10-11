@@ -94,3 +94,27 @@ class Tests(dev.Tests):
                     result=await client.post(path,headers=dict(req.headers),content=body)
                     self.assertEqual(result.status_code,401)
         self.assertEqual(self.db.commercial_licenses.docs,{})
+
+    async def test_start_30_day_trial_explicit(self):
+        before = datetime.now(timezone.utc)
+        lic = await self.licenses.issue({'label': 'Empresa nova', 'kind': 'subscription',
+                                        'max_devices': 1, 'trial_days': 30})
+        after = datetime.now(timezone.utc)
+        self.assertEqual(lic['trial_days'], 30)
+        self.assertGreaterEqual(lic['expires_at'], before + timedelta(days=30))
+        self.assertLessEqual(lic['expires_at'], after + timedelta(days=30))
+        self.assertNotIn(lic['activation_key'], str(self.db.commercial_licenses.docs))
+        self.assertEqual(self.db.commercial_licenses.docs[lic['license_id']]['business_id'], 'nova_vida')
+
+    async def test_trial_cannot_override_expiry_or_permanent_license(self):
+        options = [
+            {'label':'Inválida', 'kind':'subscription', 'max_devices': 1, 'trial_days':31},
+            {'label':'Inválida', 'kind':'permanent', 'max_devices': 1, 'trial_days':30},
+            {'label':'Inválida', 'kind':'subscription', 'max_devices': 1,
+             'trial_days':30,'expires_at':(datetime.now(timezone.utc)+timedelta(days=30)).isoformat()},
+            {'label':'Inválida', 'kind':'subscription', 'max_devices': 1, 'trial_days':True},
+        ]
+        for item in options:
+            with self.assertRaises(HTTPException):
+                await self.licenses.issue(item)
+        self.assertEqual(self.db.commercial_licenses.docs,{})
