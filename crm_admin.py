@@ -23,6 +23,9 @@ from pix_billing import PixBilling
 from import_google_contacts import rows_to_contacts
 from business_intake import BusinessIntake, tenant
 from project_continuity import ContinuityJournal, VersionConflict
+from setup_terms import SetupTerms
+from knowledge_center import read_bundle
+from outreach_overview import overview
 
 
 def authorize(request: Request):
@@ -40,6 +43,8 @@ def router(database, conversation):
             await DeviceAccess(db()).verify(request)
         else:
             authorize(request)
+        if request.method in {'POST','PUT','PATCH','DELETE'}:
+            request.state.knowledge_version = read_bundle()['version']
     api = APIRouter(prefix='/crm', dependencies=[Depends(access)])
 
     def db():
@@ -50,6 +55,24 @@ def router(database, conversation):
 
     def actor(request):
         return 'device:' + request.headers['x-jarvis-device'] if request.headers.get('x-jarvis-device') else 'owner'
+
+    @api.get('/knowledge', dependencies=[Depends(authorize)])
+    async def knowledge():
+        return read_bundle(contents=True)
+
+    @api.get('/setup-terms')
+    async def terms_get(request: Request):
+        return jsonable_encoder(await SetupTerms(db()).status(actor(request)))
+
+    @api.post('/setup-terms')
+    async def terms_decide(request: Request):
+        if len(await request.body()) > 512: raise HTTPException(413, 'invalid_terms_decision')
+        return jsonable_encoder(await SetupTerms(db()).decide(await request.json(),actor(request)))
+
+    @api.get('/outreach', dependencies=[Depends(authorize)])
+    async def outreach(offset: int = 0):
+        if not 0 <= offset <= 100000: raise HTTPException(400,'invalid_offset')
+        return jsonable_encoder(await overview(db(),conversation(db()).tester,offset))
 
     @api.post('/intake')
     async def intake(request: Request):
@@ -188,11 +211,13 @@ def router(database, conversation):
 
     @api.post('/business-setup/chat')
     async def setup_chat(request: Request):
+        await SetupTerms(db()).require(actor(request))
         if len(await request.body())>18000: raise HTTPException(413,'invalid_setup_message')
         return jsonable_encoder(await BusinessSetup(db()).chat(await request.json(),actor(request)))
 
     @api.post('/business-setup/retry')
     async def setup_retry(request: Request):
+        await SetupTerms(db()).require(actor(request))
         body=await request.json()
         if not isinstance(body,dict) or type(body.get('revision')) is not int:
             raise HTTPException(400,'invalid_setup_message')
@@ -200,11 +225,13 @@ def router(database, conversation):
 
     @api.put('/business-setup/review')
     async def setup_review(request: Request):
+        await SetupTerms(db()).require(actor(request))
         if len(await request.body())>30000: raise HTTPException(413,'invalid_business_profile')
         return jsonable_encoder(await BusinessSetup(db()).save_review(await request.json(),actor(request)))
 
     @api.post('/business-setup/propose')
     async def setup_propose(request: Request):
+        await SetupTerms(db()).require(actor(request))
         body=await request.json()
         if not isinstance(body,dict): raise HTTPException(400,'invalid_setup_message')
         return jsonable_encoder(await BusinessSetup(db()).propose(body.get('revision'),actor(request)))
@@ -349,6 +376,7 @@ def router(database, conversation):
 
     @api.post('/import/google')
     async def import_google(request: Request):
+        await SetupTerms(db()).require(actor(request))
         raw = await request.body()
         if len(raw) > 8 * 1024 * 1024:
             raise HTTPException(413, 'CSV too large')
@@ -357,7 +385,7 @@ def router(database, conversation):
         except (UnicodeError, csv.Error):
             raise HTTPException(400, 'Invalid Google CSV')
         memory, count, seen = ContactMemory(db()), 0, set()
-        for phone, name in rows_to_contacts(rows):
+        for phone, name in rows_to_contacts(rows, request.query_params.get('country')):
             if phone in seen:
                 continue
             seen.add(phone)
