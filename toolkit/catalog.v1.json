@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "description": "Catálogo leve de capacidades do JARVIS. Somente metadados, sem credenciais.",
+  "tools": [
+    {
+      "id": "pulse.setup",
+      "label": "Configurar empresa",
+      "category": "installation",
+      "description": "Guiar o cadastro inicial e revisar dados antes de qualquer conexão",
+      "action": "guide",
+      "target": "company",
+      "requires_confirmation": true,
+      "external_effect": false
+    },
+    {
+      "id": "pulse.inbox",
+      "label": "Atender clientes",
+      "category": "navigation",
+      "description": "Abrir o atendimento e a pausa humana",
+      "action": "navigate",
+      "target": "human",
+      "requires_confirmation": false,
+      "external_effect": false
+    },
+    {
+      "id": "pulse.contacts",
+      "label": "Organizar contatos",
+      "category": "navigation",
+      "description": "Abrir cadastro e organização",
+      "action": "navigate",
+      "target": "intake",
+      "requires_confirmation": false,
+      "external_effect": false
+    },
+    {
+      "id": "pulse.tasks",
+      "label": "Conferir retornos",
+      "category": "navigation",
+      "description": "Consultar tarefas e retornos",
+      "action": "navigate",
+      "target": "tasks",
+      "requires_confirmation": false,
+      "external_effect": false
+    },
+    {
+      "id": "jarvis.creator",
+      "label": "Criar um novo projeto",
+      "category": "creation",
+      "description": "Planejar módulos reutilizáveis sem publicar automaticamente",
+      "action": "guide",
+      "target": "project",
+      "requires_confirmation": true,
+      "external_effect": false
+    }
+  ]
+}
