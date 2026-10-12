@@ -154,6 +154,8 @@ app.include_router(enrollment_router(lambda: inbox.database if inbox is not None
 from pix_billing import billing_router
 app.include_router(billing_router(lambda: inbox.database if inbox is not None else None))
 app.get('/painel')(panel)
+from whatsapp_signup import preview as whatsapp_signup_preview
+app.get('/whatsapp/conectar')(whatsapp_signup_preview)
 
 @app.get('/app.webmanifest')
 async def manifest():

@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>PULSE · Conectar WhatsApp</title>
+<style nonce="__NONCE__">
+:root{color-scheme:dark;font-family:system-ui,sans-serif;background:#081712;color:#edf7f1}*{box-sizing:border-box}body{margin:0;padding:28px 18px}main{max-width:640px;margin:6vh auto;background:#11281e;border:1px solid #315a44;border-radius:24px;padding:clamp(22px,5vw,42px)}.brand{letter-spacing:.18em;color:#a5e6be;font-weight:700}h1{font-size:clamp(26px,6vw,38px);line-height:1.15}p{line-height:1.65;color:#d3e6da}button,a{min-height:48px;font:inherit}button{width:100%;border:0;border-radius:12px;padding:15px;background:#a5e6be;color:#102519;font-weight:700;cursor:pointer}button:disabled{opacity:.55;cursor:default}a{display:inline-flex;align-items:center;color:#a5e6be;margin-top:20px}button:focus-visible,a:focus-visible{outline:3px solid white;outline-offset:4px}.state{border-left:3px solid #a5e6be;padding-left:14px;min-height:48px}.muted{font-size:.9rem;color:#b4cbbb}
+</style></head><body><main><p class="brand">JARVIS PULSE</p><h1>Seu WhatsApp, conectado ao PULSE</h1><p>Vamos conferir o cadastro oficial da Meta para usar o WhatsApp Business junto com o PULSE.</p><p class="state" id="status" role="status" aria-live="polite">Conferindo disponibilidade…</p><button id="start" type="button" disabled>Abrir cadastro oficial da Meta</button><p class="muted">Esta etapa testa o fluxo de conexão. Esta página não aplica configurações ao PULSE. Se a Meta pedir desconexão ou migração do número, interrompa o cadastro.</p><a href="/painel">Voltar ao PULSE</a></main>
+<script nonce="__NONCE__">
+'use strict';
+const signupEnabled=__ENABLED__,appId='__APP_ID__',configId='__CONFIG_ID__';
+const status=document.getElementById('status'),start=document.getElementById('start');
+let sdkReady=false,loading=false,launchActive=false;
+function say(message){status.textContent=message;}
+function launch(){
+  if(!sdkReady||launchActive)return;
+  launchActive=true;
+  say('Continue na janela oficial da Meta. A conexão ainda será conferida no PULSE.');
+  FB.login(response=>{
+    launchActive=false;
+    // OAuth code belongs only to this transient callback. Never store, display,
+    // log or exchange it here; the existing production token remains untouched.
+    say(response&&response.authResponse?'A etapa da Meta terminou. Volte ao PULSE e confira a conexão; este teste não altera o atendimento.':'Cadastro não concluído. Volte ao PULSE para conferir o atendimento.');
+  },{config_id:configId,response_type:'code',override_default_response_type:true,
+    extras:{version:'v4',featureType:'whatsapp_business_app_onboarding',sessionInfoVersion:'3'}});
+}
+window.addEventListener('message',event=>{
+  if(!signupEnabled||!launchActive||!['https://www.facebook.com','https://web.facebook.com','https://business.facebook.com'].includes(event.origin))return;
+  let payload;
+  try{payload=typeof event.data==='string'?JSON.parse(event.data):event.data;}catch{return;}
+  if(!payload||payload.type!=='WHATSAPP_EMBEDDED_SIGNUP')return;
+  if(payload.event==='CANCEL')say('Cadastro interrompido. Volte ao PULSE para conferir o atendimento.');
+  else if(payload.event==='ERROR')say('A Meta não concluiu o cadastro. Não desconecte o número atual.');
+  else if(payload.event==='FINISH')say('A Meta retornou uma etapa concluída. A conexão e a sincronização ainda precisam ser verificadas.');
+});
+start.onclick=()=>{
+  if(!signupEnabled||loading)return;
+  if(sdkReady){launch();return;}
+  loading=true;start.disabled=true;say('Preparando a janela oficial da Meta…');
+  const fail=()=>{loading=false;start.disabled=false;say('Não foi possível carregar a Meta. Tente novamente; nenhuma configuração foi aplicada por esta página.');};
+  window.fbAsyncInit=()=>{FB.init({appId,autoLogAppEvents:false,xfbml:false,version:'v26.0'});sdkReady=true;loading=false;start.disabled=false;start.textContent='Continuar na Meta';say('Pronto. Toque em Continuar na Meta para abrir o cadastro.');};
+  let script=document.createElement('script');script.src='https://connect.facebook.net/pt_BR/sdk.js';script.async=true;script.crossOrigin='anonymous';script.onerror=fail;document.head.append(script);
+};
+if(signupEnabled){start.disabled=false;say('Fluxo de teste pronto. A Meta confirmará as opções disponíveis para sua conta.');}
+else say('O teste de conexão ainda precisa ser liberado pelo proprietário. Esta página não altera a configuração atual do atendimento.');
+</script></body></html>
