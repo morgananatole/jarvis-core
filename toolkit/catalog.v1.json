@@ -1,56 +1,170 @@
 {
-  "schema_version": 1,
-  "description": "Catálogo leve de capacidades do JARVIS. Somente metadados, sem credenciais.",
-  "tools": [
+  "schema_version": 2,
+  "description": "Biblioteca declarativa e leve do criador. Nenhum código remoto ou credencial embutida.",
+  "principles": [
+    "voice_or_text_first",
+    "reuse_before_generation",
+    "contextual_controls_only",
+    "no_secret_persistence",
+    "explicit_external_action_authorization"
+  ],
+  "components": [
     {
-      "id": "pulse.setup",
+      "id": "field.text",
+      "kind": "input",
+      "type": "text",
+      "label": "Informação",
+      "max_length": 120
+    },
+    {
+      "id": "field.password",
+      "kind": "input",
+      "type": "password",
+      "label": "Credencial",
+      "persist": false,
+      "log": false,
+      "autocomplete": "off"
+    },
+    {
+      "id": "field.select",
+      "kind": "select",
+      "label": "Escolher opção"
+    },
+    {
+      "id": "action.confirm",
+      "kind": "button",
+      "label": "Confirmar",
+      "external_effect": false
+    },
+    {
+      "id": "action.back",
+      "kind": "button",
+      "label": "Voltar",
+      "external_effect": false
+    }
+  ],
+  "flows": [
+    {
+      "id": "company.setup",
       "label": "Configurar empresa",
-      "category": "installation",
-      "description": "Guiar o cadastro inicial e revisar dados antes de qualquer conexão",
-      "action": "guide",
-      "target": "company",
-      "requires_confirmation": true,
+      "intents": [
+        "configurar empresa",
+        "instalar pulse",
+        "cadastrar negócio"
+      ],
+      "steps": [
+        {
+          "say": "Qual é o nome da empresa?",
+          "controls": [
+            {
+              "component": "field.text",
+              "name": "company_name",
+              "label": "Nome da empresa"
+            }
+          ]
+        },
+        {
+          "say": "Qual é o segmento do negócio?",
+          "controls": [
+            {
+              "component": "field.text",
+              "name": "segment",
+              "label": "Segmento"
+            }
+          ]
+        },
+        {
+          "say": "Revise os dados antes de prosseguir.",
+          "controls": [
+            {
+              "component": "action.confirm",
+              "name": "review",
+              "label": "Revisar cadastro"
+            }
+          ]
+        }
+      ],
       "external_effect": false
     },
     {
-      "id": "pulse.inbox",
-      "label": "Atender clientes",
-      "category": "navigation",
-      "description": "Abrir o atendimento e a pausa humana",
-      "action": "navigate",
-      "target": "human",
-      "requires_confirmation": false,
+      "id": "customer.find",
+      "label": "Encontrar cliente",
+      "intents": [
+        "encontrar cliente",
+        "procurar contato",
+        "buscar cliente"
+      ],
+      "steps": [
+        {
+          "say": "Qual nome ou referência devo procurar?",
+          "controls": [
+            {
+              "component": "field.text",
+              "name": "customer_query",
+              "label": "Nome ou referência"
+            }
+          ]
+        }
+      ],
       "external_effect": false
     },
     {
-      "id": "pulse.contacts",
-      "label": "Organizar contatos",
-      "category": "navigation",
-      "description": "Abrir cadastro e organização",
-      "action": "navigate",
-      "target": "intake",
-      "requires_confirmation": false,
+      "id": "project.create",
+      "label": "Criar projeto",
+      "intents": [
+        "criar projeto",
+        "criar aplicativo",
+        "novo sistema"
+      ],
+      "steps": [
+        {
+          "say": "Qual problema esse projeto deve resolver?",
+          "controls": [
+            {
+              "component": "field.text",
+              "name": "project_goal",
+              "label": "Objetivo do projeto"
+            }
+          ]
+        }
+      ],
       "external_effect": false
     },
     {
-      "id": "pulse.tasks",
-      "label": "Conferir retornos",
-      "category": "navigation",
-      "description": "Consultar tarefas e retornos",
-      "action": "navigate",
-      "target": "tasks",
-      "requires_confirmation": false,
+      "id": "credential.demo",
+      "label": "Conectar serviço",
+      "intents": [
+        "conectar serviço",
+        "inserir senha",
+        "configurar credencial"
+      ],
+      "steps": [
+        {
+          "say": "Esta demonstração não recebe credenciais reais. No produto, use um formulário seguro ligado a um cofre de segredos.",
+          "controls": []
+        }
+      ],
       "external_effect": false
+    }
+  ],
+  "tooling": [
+    {
+      "id": "install.check",
+      "type": "validator",
+      "description": "Verificar pré-requisitos sem modificar contas",
+      "status": "planned"
     },
     {
-      "id": "jarvis.creator",
-      "label": "Criar um novo projeto",
-      "category": "creation",
-      "description": "Planejar módulos reutilizáveis sem publicar automaticamente",
-      "action": "guide",
-      "target": "project",
-      "requires_confirmation": true,
-      "external_effect": false
+      "id": "ui.contextual",
+      "type": "renderer",
+      "description": "Exibir campos e ações conforme esquema validado",
+      "status": "preview"
+    },
+    {
+      "id": "pulse.navigation",
+      "type": "connector",
+      "description": "Abrir áreas existentes com autenticação",
+      "status": "planned"
     }
   ]
 }
