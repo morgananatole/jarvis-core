@@ -26,9 +26,9 @@ window.addEventListener('message',event=>{
   let payload;
   try{payload=typeof event.data==='string'?JSON.parse(event.data):event.data;}catch{return;}
   if(!payload||!['WA_EMBEDDED_SIGNUP','WHATSAPP_EMBEDDED_SIGNUP'].includes(payload.type))return;
-  if(payload.event==='CANCEL')say('Cadastro interrompido. Volte ao PULSE para conferir o atendimento.');
-  else if(payload.event==='ERROR')say('A Meta não concluiu o cadastro. Não desconecte o número atual.');
-  else if(['FINISH','FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING'].includes(payload.event))say('A Meta concluiu a etapa visual. Ainda faltam troca segura do código, vínculo de ativos e verificação da API. Não considere a conexão pronta.');
+  if(payload.event==='CANCEL'){launchActive=false;say('Cadastro interrompido. Volte ao PULSE para conferir o atendimento.');}
+  else if(payload.event==='ERROR'){launchActive=false;say('A Meta não concluiu o cadastro. Não desconecte o número atual.');}
+  else if(['FINISH','FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING'].includes(payload.event)){launchActive=false;say('A Meta concluiu a etapa visual. Ainda faltam troca segura do código, vínculo de ativos e verificação da API. Não considere a conexão pronta.');}
 });
 start.onclick=()=>{
   if(!signupEnabled||loading)return;
