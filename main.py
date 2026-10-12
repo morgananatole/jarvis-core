@@ -155,6 +155,7 @@ app.include_router(enrollment_router(lambda: inbox.database if inbox is not None
 from pix_billing import billing_router
 app.include_router(billing_router(lambda: inbox.database if inbox is not None else None))
 app.get('/painel')(panel)
+app.get('/panel', include_in_schema=False)(panel)
 from installation_page import installation, launcher
 app.get('/instalar')(installation)
 app.get('/instalar/atalho')(launcher)
