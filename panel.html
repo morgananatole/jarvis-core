@@ -80,7 +80,9 @@ el('checkWhatsappOperations').onclick=async()=>{
    ' Última mensagem recebida: '+last+'. Última resposta aceita pela Meta (referência à entrada): '+reply+
    '. Estado da última mensagem: '+state+'. Comprovação de entrega: '+delivery+
    '. Revisões necessárias nas últimas 40 entradas: '+d.review_required_in_last_40+
-   '. Retornos automáticos: '+(d.followups_automatic_enabled?'ligados':'desligados')+'. '+d.note;
+   '. Retornos automáticos: '+(d.followups_automatic_enabled?'ligados':'desligados')+
+   '. Saudação instantânea: '+(d.instant_greeting_enabled?'ligada':'desligada')+
+   '. Indicador de digitação Meta: '+(d.typing_indicator_enabled?'ligado':'desligado')+'. '+d.note;
  }catch(e){el('whatsappOperations').textContent=e.message}
  finally{el('checkWhatsappOperations').disabled=false}
 };
