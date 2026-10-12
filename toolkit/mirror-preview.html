@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Espelho JARVIS — protótipo local</title>
+<style>
+:root{color-scheme:dark;font-family:system-ui,-apple-system,sans-serif}*{box-sizing:border-box}
+body{margin:0;min-height:100vh;background:radial-gradient(ellipse at 50% 20%,#143e50,#090f1b 65%);color:#f0f5fa;display:grid;place-items:center;padding:20px}
+main{width:min(720px,100%);border:1px solid #9dbfd54a;border-radius:28px;background:linear-gradient(140deg,#142838ed,#0c1624f5);box-shadow:0 30px 90px #0009;overflow:hidden}
+header{padding:26px 26px 12px;display:flex;align-items:center;justify-content:space-between;gap:12px}h1{font-size:clamp(19px,4vw,26px);margin:0;letter-spacing:.12em}small{color:#adc0cb}
+.mirror{height:230px;display:grid;place-items:center;position:relative;overflow:hidden;background:radial-gradient(ellipse at center,#133b50 0%,#0c1829 70%)}
+.mirror:before{content:"";position:absolute;width:220px;height:220px;border-radius:50%;background:radial-gradient(circle,#d7fff9 0%,#65f0de 12%,#2d91c1 35%,#1a2b5e 60%,transparent 70%);filter:blur(8px);opacity:.75;animation:breathe 6s ease-in-out infinite}
+.mirror:after{content:"";position:absolute;width:320px;height:100px;border:1px solid #9bf5e366;border-radius:50%;transform:rotate(-22deg);box-shadow:0 0 30px #4cf1d629;animation:orbit 9s ease-in-out infinite}
+.mirror strong{position:relative;z-index:1;letter-spacing:.22em;font-size:13px;text-shadow:0 0 20px #fff}
+@keyframes breathe{50%{transform:scale(1.18);opacity:.95}}@keyframes orbit{50%{transform:rotate(18deg)}}
+section{padding:22px 26px}p{line-height:1.55;color:#d3e1e8}.hint{font-size:13px;color:#9fb7c5}.options{display:flex;gap:9px;flex-wrap:wrap}button{font:inherit;min-height:44px;border-radius:14px;border:1px solid #7bb4c566;background:#19384a;color:#effbff;padding:10px 15px;cursor:pointer}button:hover,button:focus-visible{background:#275a70;outline:2px solid #81f4df;outline-offset:2px}
+form{display:flex;gap:8px;margin-top:18px}input{flex:1;min-width:0;padding:12px;border-radius:12px;border:1px solid #9ab4c7;background:#091622;color:white;font:inherit}
+#response{min-height:50px}footer{padding:0 26px 22px;font-size:12px;color:#94acb9}
+@media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important}}
+@media(max-width:440px){form{flex-direction:column}.mirror{height:190px}}
+</style></head>
+<body><main><header><div><h1>JARVIS <span style="color:#86eadc">/ ESPELHO</span></h1><small>Seu ponto de contato com a inteligência</small></div><small>PRÉVIA LOCAL</small></header>
+<div class="mirror" aria-hidden="true"><strong>JARVIS</strong></div>
+<section><h2 id="heading">O que vamos construir hoje?</h2><p id="response" role="status" aria-live="polite">Posso ajudar a configurar uma empresa, organizar atendimentos ou planejar um novo projeto. Escolha uma direção e mostrarei os próximos passos.</p>
+<div class="options" id="options"></div>
+<form id="ask"><input id="request" maxlength="300" autocomplete="off" aria-label="Descreva o que deseja fazer" placeholder="Diga o que você precisa…"><button type="submit">Continuar</button></form>
+<p class="hint">Esta prévia demonstra a experiência e cria opções na tela. Não está conectada à IA nem executa alterações externas.</p></section>
+<footer>Leve para o PULSE e para outros produtos como componente reutilizável. Sem imagens externas, bibliotecas ou chamadas de rede.</footer></main>
+<script>
+'use strict';
+const options=document.getElementById('options'),response=document.getElementById('response');
+const paths={
+company:{text:'Vamos configurar sua empresa. Primeiro reunimos o segmento, os serviços, horários e canais. Depois você revisa tudo antes de conectar qualquer conta.',choices:[['Informações da empresa','company-info'],['Conexões e permissões','company-connections'],['Voltar','home']]},
+project:{text:'Para criar um produto novo, começamos pelo propósito, usuários, componentes reutilizáveis e critérios de aceite. Nada será publicado sem revisão.',choices:[['Definir objetivo','project-goal'],['Ver componentes','components'],['Voltar','home']]},
+human:{text:'Atender abre a caixa de conversas. A IA deve respeitar a pausa quando o humano assume.',choices:[['Voltar','home']]},
+intake:{text:'Organizar reúne contatos e informações para revisão, sem enviar mensagens automaticamente.',choices:[['Voltar','home']]},
+tasks:{text:'Retornos mostra compromissos e acompanhamentos. O envio depende das autorizações do canal.',choices:[['Voltar','home']]},
+'company-info':{text:'Etapa 1: informe o ramo, serviços, valores e horários. O assistente deverá transformar essas informações em um cadastro revisável.',choices:[['Próxima etapa','company-connections'],['Voltar','company']]},
+'company-connections':{text:'Etapa 2: verificar canais e permissões. A instalação real deverá mostrar somente as autorizações necessárias e seus resultados comprovados.',choices:[['Voltar','company']]},
+'project-goal':{text:'Descreva o problema que o novo projeto resolve e como saberemos que funciona. Depois selecionamos ferramentas existentes antes de criar outras.',choices:[['Ver componentes','components'],['Voltar','project']]},
+components:{text:'Biblioteca inicial: instalador, atendimento, organização, retornos e criador. O catálogo definitivo deverá ser versionado e validado.',choices:[['Voltar','project']]},
+home:{text:'Posso ajudar a configurar uma empresa, organizar atendimentos ou planejar um novo projeto. Escolha uma direção e mostrarei os próximos passos.',choices:[['Configurar empresa','company'],['Atender','human'],['Organizar','intake'],['Retornos','tasks'],['Criar projeto','project']]}
+};
+function show(id){const item=paths[id]||paths.home;response.textContent=item.text;options.replaceChildren();for(const [label,next] of item.choices){const b=document.createElement('button');b.type='button';b.textContent=label;b.addEventListener('click',()=>show(next));options.append(b)}}
+document.getElementById('ask').addEventListener('submit',e=>{e.preventDefault();const value=document.getElementById('request').value.trim().toLowerCase();if(!value){response.textContent='Descreva uma tarefa ou escolha uma opção.';return}const target=/empresa|instal|configur/.test(value)?'company':/cliente|atend|mensag/.test(value)?'human':/retorn|agenda/.test(value)?'tasks':/projeto|criar|app/.test(value)?'project':null;if(target){show(target)}else{response.textContent='Ainda não interpreto pedidos livres nesta prévia. Escolha uma das opções para continuar.';options.replaceChildren();const b=document.createElement('button');b.textContent='Ver opções';b.addEventListener('click',()=>show('home'));options.append(b)}});
+show('home');
+</script></body></html>
