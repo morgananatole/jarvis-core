@@ -1,0 +1,69 @@
+{
+  "schema_version": 1,
+  "id": "pulse-existing-number-coexistence",
+  "title": "Instalar PULSE mantendo número comercial",
+  "applies_to": [
+    "PULSE",
+    "BOOST"
+  ],
+  "constraints": [
+    "keep_existing_number",
+    "business_app_must_keep_working",
+    "no_unverified_meta_charges"
+  ],
+  "steps": [
+    {
+      "id": "inventory",
+      "label": "Confirmar número existente no Business App",
+      "kind": "human_verification",
+      "on_fail": "stop_and_preserve"
+    },
+    {
+      "id": "readonly",
+      "label": "Diagnóstico da conta e API sem alterações",
+      "kind": "read_only",
+      "on_fail": "diagnose_permissions"
+    },
+    {
+      "id": "eligibility",
+      "label": "Verificar coexistência oficial",
+      "kind": "official_meta_flow",
+      "on_fail": "assisted_mode"
+    },
+    {
+      "id": "webhook",
+      "label": "Verificar webhook e assinatura",
+      "kind": "diagnostic",
+      "on_fail": "fix_webhook"
+    },
+    {
+      "id": "app",
+      "label": "Confirmar que o número continua no celular",
+      "kind": "human_verification",
+      "on_fail": "stop_and_restore"
+    },
+    {
+      "id": "inbound",
+      "label": "Confirmar mensagem recebida no PULSE",
+      "kind": "authorized_test",
+      "on_fail": "inspect_event_logs"
+    },
+    {
+      "id": "outbound",
+      "label": "Confirmar resposta, recibo e custo",
+      "kind": "authorized_test",
+      "on_fail": "block_unverified_send"
+    },
+    {
+      "id": "complete",
+      "label": "Salvar evidência e publicar receita validada",
+      "kind": "audit",
+      "on_fail": "keep_draft"
+    }
+  ],
+  "publication_rule": "verified_steps_only",
+  "fallback": "assisted_business_app",
+  "estimated_clicks": null,
+  "observed_clicks": null,
+  "verified": false
+}
