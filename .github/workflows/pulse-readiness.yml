@@ -1,0 +1,35 @@
+name: PULSE readiness checks
+on:
+  pull_request:
+    paths:
+      - "panel.html"
+      - "toolkit/**"
+      - "tests/test_readiness_contract.py"
+      - ".github/workflows/pulse-readiness.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Run offline contract tests
+        run: python -m unittest discover -s tests -p 'test_readiness_contract.py' -v
+      - name: Validate inline JavaScript syntax with Node
+        run: |
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const vm = require('node:vm');
+          for (const path of ['panel.html','toolkit/installation-readiness.html','toolkit/mirror-preview.html']) {
+            const html = fs.readFileSync(path, 'utf8');
+            const scripts = [...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi)];
+            if (!scripts.length) throw new Error('No inline scripts in ' + path);
+            for (const [i, script] of scripts.entries()) new vm.Script(script[1], {filename:path+':'+i});
+            console.log(path + ': ' + scripts.length + ' inline script(s) parsed');
+          }
+          NODE
