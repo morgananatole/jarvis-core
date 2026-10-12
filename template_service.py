@@ -6,6 +6,15 @@ from contact_memory import ContactMemory
 
 
 async def send_template(db, profile):
+    # A low daily cap or an approved template does not prove zero transport cost.
+    # No official free-template entitlement is verified here. Fail closed even
+    # when an old environment has template sending enabled.
+    if os.getenv('WHATSAPP_ZERO_COST_ONLY', 'true').lower() != 'false':
+        raise ValueError('zero_cost_blocks_unverified_template')
+    if profile.get('human_mode') or profile.get('do_not_contact'):
+        raise ValueError('contact_not_available')
+    if profile.get('facts', {}).get('contact_permission', {}).get('value') != 'allowed':
+        raise ValueError('contact_permission_required')
     if os.getenv('WHATSAPP_TEMPLATE_SEND_ENABLED', 'false') != 'true':
         raise ValueError('template_send_disabled')
     cap = min(1000, max(0, int(os.getenv('WHATSAPP_TEMPLATE_MAX_PER_DAY', '0'))))

@@ -9,6 +9,9 @@ Data: 2026-10-12
 - Não usar automação não oficial do WhatsApp Web, simulação de cliques ou rotação para contornar limites/bloqueios.
 
 ## Regra econômica verificada em outubro de 2026
+> Atualização: consultar `PROSPECCAO_ZERO_GASTO_2026-10-12.md`. A página oficial
+> lida nesta etapa informa serviços gratuitos na janela de atendimento; a tarifa
+> secundária e franquia abaixo são histórico, não regra vigente de implementação.
 - A Cloud API pode cobrar mensagens de marketing, utilidade, autenticação e serviço.
 - Fontes secundárias reportam, no Brasil, desde 01/10/2026, R$ 0,3217 por marketing e R$ 0,035 por serviço/utilidade/autenticação; serviço tem franquia de 1.000 por mês. Confirmar sempre na tabela oficial Meta antes de configurar cobrança.
 - Mensagens enviadas diretamente pelo WhatsApp Business App não têm a tarifa de envio da Cloud API; **isso não oferece interface oficial irrestrita para o JARVIS enviá-las automaticamente**.
