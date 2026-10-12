@@ -29,7 +29,7 @@ import business_profile
 import customer_care
 import contact_options
 from whatsapp_coexistence import text_echo, record_text_echo
-from instant_greeting import greeting_for_first_contact
+from instant_greeting import greeting_for_first_contact, GREETING
 from whatsapp_typing import send_typing_indicator
 from device_access import DeviceAccess
 from conversation_service import ConversationService, delivery_status
@@ -331,6 +331,7 @@ async def _process_message(message):
         log.warning("Test sender rejected: digits=%s authorized_brazil_alias=False",
                     len(message["from"]))
         return
+    started_at = time.monotonic()
     log.warning("Authorized text received for configured phone")
     timestamp = float(message["timestamp"])
     if timestamp < time.time() - 23 * 3600 or timestamp > time.time() + 300:
@@ -416,13 +417,17 @@ async def _process_message(message):
         await inbox.update_one(guard, {"$set": {
             "state": "sent", "outbound_id": message_id}})
         await memory.record_outbound(message["from"], message_id, reply)
+        log.info('WhatsApp processing completed: duration_ms=%d, reply_kind=%s',
+                 int((time.monotonic()-started_at)*1000),
+                 'instant' if reply == GREETING else 'other')
         job_state = await inbox.find_one({'_id': job['_id']})
         if job_state.get('media_key'):
             await inbox.update_one(guard, {'$set': {'media_state': 'sending'}})
             photo_id = await send_photo(inbox.database, message['from'], job_state['media_key'])
             await inbox.update_one(guard, {'$set': {'media_state': 'accepted', 'photo_id': photo_id}})
     except Exception:
-        log.warning("Reply failed or uncertain; manual review required")
+        log.warning('Reply failed or uncertain; manual review required; duration_ms=%d',
+                    int((time.monotonic()-started_at)*1000))
         try:
             await HumanService(inbox.database, send_reply, authorized_test_sender).request(
                 message['from'], message['id'], 'reply_failed_or_uncertain')
