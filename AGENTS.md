@@ -3,6 +3,9 @@
 Aplicável a toda sessão de engenharia trabalhando neste repositório. Esta regra **não** modifica o roteamento das IAs, a Meta, os webhooks, a cobrança nem configurações de produção.
 
 ## Primeira operação de uma sessão
+0. Execute `python scripts/read_before_work.py` e leia `CENTRAL_NORMAS.md`.
+   A central registra fontes, hierarquia e versão; use `--full` para ler toda a base.
+   Antes de agir, declare no checkpoint objetivo, regras aplicadas, conflitos e teste.
 1. Leia este arquivo e a documentação relevante em `docs/`.
 2. Se houver acesso autorizado ao Google Drive do proprietário, localize e leia o documento **JARVIS PULSE — Continuidade de Desenvolvimento (10-10-2026)** (documento privado e cumulativo). Se não houver acesso, sinalize a limitação; **não presuma conhecer** ideias ou mensagens que não leu.
 3. Leia o estado atual da branch, commits/PRs, CI, deploy e testes antes de alegar que algo já está em produção.

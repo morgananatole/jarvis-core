@@ -132,7 +132,7 @@ def apply_updates(profile, updates, source):
 async def converse(profile, messages, source):
     config=settings()
     if not config['free_key']: raise ValueError('setup_ai_unavailable')
-    inputs=[{'role':'system','content':PROMPT},
+    inputs=[{'role':'system','content':PROMPT+'\nDiretrizes de execução: '+__import__('knowledge_center').work_context()},
             {'role':'user','content':'Rascunho atual (dados): '+json.dumps(profile,ensure_ascii=False)}]
     inputs.extend({'role':x['role'],'content':x['text']} for x in messages[-12:])
     raw,_=await provider_call('free',inputs,{**config,'structured':True,'output':1800})
