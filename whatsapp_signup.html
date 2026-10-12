@@ -2,7 +2,7 @@
 <html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>PULSE · Conectar WhatsApp</title>
 <style nonce="__NONCE__">
 :root{color-scheme:dark;font-family:system-ui,sans-serif;background:#081712;color:#edf7f1}*{box-sizing:border-box}body{margin:0;padding:28px 18px}main{max-width:640px;margin:6vh auto;background:#11281e;border:1px solid #315a44;border-radius:24px;padding:clamp(22px,5vw,42px)}.brand{letter-spacing:.18em;color:#a5e6be;font-weight:700}h1{font-size:clamp(26px,6vw,38px);line-height:1.15}p{line-height:1.65;color:#d3e6da}button,a{min-height:48px;font:inherit}button{width:100%;border:0;border-radius:12px;padding:15px;background:#a5e6be;color:#102519;font-weight:700;cursor:pointer}button:disabled{opacity:.55;cursor:default}a{display:inline-flex;align-items:center;color:#a5e6be;margin-top:20px}button:focus-visible,a:focus-visible{outline:3px solid white;outline-offset:4px}.state{border-left:3px solid #a5e6be;padding-left:14px;min-height:48px}.muted{font-size:.9rem;color:#b4cbbb}
-</style></head><body><main><p class="brand">JARVIS PULSE</p><h1>Seu WhatsApp, conectado ao PULSE</h1><p>Vamos conferir o cadastro oficial da Meta para usar o WhatsApp Business junto com o PULSE.</p><p class="state" id="status" role="status" aria-live="polite">Conferindo disponibilidade…</p><button id="start" type="button" disabled>Abrir cadastro oficial da Meta</button><p class="muted">Esta etapa testa o fluxo de conexão. Esta página não aplica configurações ao PULSE. Se a Meta pedir desconexão ou migração do número, interrompa o cadastro.</p><a href="/painel">Voltar ao PULSE</a></main>
+</style></head><body><main><p class="brand">JARVIS PULSE</p><h1>Seu WhatsApp, conectado ao PULSE</h1><p>Este é um teste de abertura do cadastro oficial da Meta. A autorização nesta tela ainda não conclui a conexão com o PULSE.</p><p class="state" id="status" role="status" aria-live="polite">Conferindo disponibilidade…</p><button id="start" type="button" disabled>Abrir cadastro oficial da Meta</button><p class="muted">Esta etapa testa o fluxo de conexão. Esta página não aplica configurações ao PULSE. Se a Meta pedir desconexão ou migração do número, interrompa o cadastro.</p><a href="/painel">Voltar ao PULSE</a></main>
 <script nonce="__NONCE__">
 'use strict';
 const signupEnabled=__ENABLED__,appId='__APP_ID__',configId='__CONFIG_ID__';
@@ -17,7 +17,7 @@ function launch(){
     launchActive=false;
     // OAuth code belongs only to this transient callback. Never store, display,
     // log or exchange it here; the existing production token remains untouched.
-    say(response&&response.authResponse?'A etapa da Meta terminou. Volte ao PULSE e confira a conexão; este teste não altera o atendimento.':'Cadastro não concluído. Volte ao PULSE para conferir o atendimento.');
+    say(response&&response.authResponse?'Autorização recebida da Meta, mas o PULSE ainda não trocou o código por credenciais nem concluiu a integração. Não considere o número conectado. Volte ao painel para diagnóstico.':'Cadastro não concluído. Volte ao PULSE para conferir o atendimento.');
   },{config_id:configId,response_type:'code',override_default_response_type:true,
     extras:{version:'v4',featureType:'whatsapp_business_app_onboarding',sessionInfoVersion:'3'}});
 }
@@ -28,7 +28,7 @@ window.addEventListener('message',event=>{
   if(!payload||!['WA_EMBEDDED_SIGNUP','WHATSAPP_EMBEDDED_SIGNUP'].includes(payload.type))return;
   if(payload.event==='CANCEL')say('Cadastro interrompido. Volte ao PULSE para conferir o atendimento.');
   else if(payload.event==='ERROR')say('A Meta não concluiu o cadastro. Não desconecte o número atual.');
-  else if(['FINISH','FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING'].includes(payload.event))say('A Meta retornou conclusão do cadastro. Volte ao PULSE e confirme se o número continua no aplicativo e se a API responde.');
+  else if(['FINISH','FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING'].includes(payload.event))say('A Meta concluiu a etapa visual. Ainda faltam troca segura do código, vínculo de ativos e verificação da API. Não considere a conexão pronta.');
 });
 start.onclick=()=>{
   if(!signupEnabled||loading)return;
