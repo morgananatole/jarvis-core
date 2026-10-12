@@ -3,3 +3,7 @@
 __pycache__/
 .pytest_cache/
 installation-runs/
+.pulse-web-pilot/
+node_modules/
+.wwebjs_auth/
+.wwebjs_cache/
