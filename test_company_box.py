@@ -17,6 +17,7 @@ const vm=require('node:vm'),assert=require('node:assert/strict');
 class Element{
  constructor(tag='div'){this.tagName=tag;this.children=[];this.dataset={};this.hidden=false;this.value='';this.textContent='';this.classList={add(){},remove(){}}}
  append(...items){for(let x of items){if(x.parentElement)x.remove();x.parentElement=this;this.children.push(x)}}
+ appendChild(item){this.append(item);return item}
  replaceChildren(...items){this.children.forEach(x=>x.parentElement=null);this.children=[];this.append(...items)}
  remove(){if(this.parentElement){let p=this.parentElement;p.children=p.children.filter(x=>x!==this);this.parentElement=null}}
  addEventListener(){} setAttribute(k,v){this[k]=v} scrollIntoView(){}
