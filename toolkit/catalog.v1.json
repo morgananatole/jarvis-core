@@ -1,0 +1,170 @@
+{
+  "schema_version": 2,
+  "description": "Biblioteca declarativa e leve do criador. Nenhum código remoto ou credencial embutida.",
+  "principles": [
+    "voice_or_text_first",
+    "reuse_before_generation",
+    "contextual_controls_only",
+    "no_secret_persistence",
+    "explicit_external_action_authorization"
+  ],
+  "components": [
+    {
+      "id": "field.text",
+      "kind": "input",
+      "type": "text",
+      "label": "Informação",
+      "max_length": 120
+    },
+    {
+      "id": "field.password",
+      "kind": "input",
+      "type": "password",
+      "label": "Credencial",
+      "persist": false,
+      "log": false,
+      "autocomplete": "off"
+    },
+    {
+      "id": "field.select",
+      "kind": "select",
+      "label": "Escolher opção"
+    },
+    {
+      "id": "action.confirm",
+      "kind": "button",
+      "label": "Confirmar",
+      "external_effect": false
+    },
+    {
+      "id": "action.back",
+      "kind": "button",
+      "label": "Voltar",
+      "external_effect": false
+    }
+  ],
+  "flows": [
+    {
+      "id": "company.setup",
+      "label": "Configurar empresa",
+      "intents": [
+        "configurar empresa",
+        "instalar pulse",
+        "cadastrar negócio"
+      ],
+      "steps": [
+        {
+          "say": "Qual é o nome da empresa?",
+          "controls": [
+            {
+              "component": "field.text",
+              "name": "company_name",
+              "label": "Nome da empresa"
+            }
+          ]
+        },
+        {
+          "say": "Qual é o segmento do negócio?",
+          "controls": [
+            {
+              "component": "field.text",
+              "name": "segment",
+              "label": "Segmento"
+            }
+          ]
+        },
+        {
+          "say": "Revise os dados antes de prosseguir.",
+          "controls": [
+            {
+              "component": "action.confirm",
+              "name": "review",
+              "label": "Revisar cadastro"
+            }
+          ]
+        }
+      ],
+      "external_effect": false
+    },
+    {
+      "id": "customer.find",
+      "label": "Encontrar cliente",
+      "intents": [
+        "encontrar cliente",
+        "procurar contato",
+        "buscar cliente"
+      ],
+      "steps": [
+        {
+          "say": "Qual nome ou referência devo procurar?",
+          "controls": [
+            {
+              "component": "field.text",
+              "name": "customer_query",
+              "label": "Nome ou referência"
+            }
+          ]
+        }
+      ],
+      "external_effect": false
+    },
+    {
+      "id": "project.create",
+      "label": "Criar projeto",
+      "intents": [
+        "criar projeto",
+        "criar aplicativo",
+        "novo sistema"
+      ],
+      "steps": [
+        {
+          "say": "Qual problema esse projeto deve resolver?",
+          "controls": [
+            {
+              "component": "field.text",
+              "name": "project_goal",
+              "label": "Objetivo do projeto"
+            }
+          ]
+        }
+      ],
+      "external_effect": false
+    },
+    {
+      "id": "credential.demo",
+      "label": "Conectar serviço",
+      "intents": [
+        "conectar serviço",
+        "inserir senha",
+        "configurar credencial"
+      ],
+      "steps": [
+        {
+          "say": "Esta demonstração não recebe credenciais reais. No produto, use um formulário seguro ligado a um cofre de segredos.",
+          "controls": []
+        }
+      ],
+      "external_effect": false
+    }
+  ],
+  "tooling": [
+    {
+      "id": "install.check",
+      "type": "validator",
+      "description": "Verificar pré-requisitos sem modificar contas",
+      "status": "planned"
+    },
+    {
+      "id": "ui.contextual",
+      "type": "renderer",
+      "description": "Exibir campos e ações conforme esquema validado",
+      "status": "preview"
+    },
+    {
+      "id": "pulse.navigation",
+      "type": "connector",
+      "description": "Abrir áreas existentes com autenticação",
+      "status": "planned"
+    }
+  ]
+}

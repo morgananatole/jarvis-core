@@ -1,0 +1,84 @@
+{
+  "schema_version": 1,
+  "project_id": "",
+  "run_id": "",
+  "playbook_version": "1.0",
+  "created_at_utc": "",
+  "objective": "",
+  "budget": {
+    "meta_message_max": "0",
+    "ai_max": "0",
+    "hosting_max": "0"
+  },
+  "nonnegotiables": [
+    "preserve_existing_commercial_number",
+    "keep_whatsapp_business_app_operational",
+    "no_unverified_meta_charges",
+    "no_secret_logging"
+  ],
+  "baseline": {
+    "repository": "",
+    "branch": "",
+    "commit": "",
+    "production_version": "",
+    "whatsapp_business_app_working": null,
+    "coexistence_eligible": null
+  },
+  "steps": [
+    {
+      "step_id": "N0",
+      "goal": "Confirmar numero comercial ativo no WhatsApp Business App",
+      "status": "pending",
+      "prerequisites": [],
+      "action": "",
+      "expected": "",
+      "observed": "",
+      "sanitized_evidence": "",
+      "error_code": "",
+      "root_cause_or_hypothesis": "",
+      "fix": "",
+      "rollback": "",
+      "duration_seconds": null,
+      "observed_cost": null,
+      "human_required": false,
+      "next_action": ""
+    },
+    {
+      "step_id": "N1",
+      "goal": "Diagnostico somente leitura da conta e numero",
+      "status": "pending"
+    },
+    {
+      "step_id": "N2",
+      "goal": "Elegibilidade da coexistencia oficial",
+      "status": "pending"
+    },
+    {
+      "step_id": "N3",
+      "goal": "Webhook",
+      "status": "pending"
+    },
+    {
+      "step_id": "N4",
+      "goal": "Mesmo numero continua no app Business",
+      "status": "pending"
+    },
+    {
+      "step_id": "N5",
+      "goal": "Recebimento no PULSE",
+      "status": "pending"
+    },
+    {
+      "step_id": "N6",
+      "goal": "Entrega e pausa humana",
+      "status": "pending"
+    },
+    {
+      "step_id": "N7",
+      "goal": "Catalogar procedimento e rollback",
+      "status": "pending"
+    }
+  ],
+  "status": "not_started",
+  "last_verified_at_utc": null
+}

@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Espelho JARVIS · Interface contextual</title>
+<style>
+:root{color-scheme:dark;font:16px system-ui,-apple-system,sans-serif}*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;background:radial-gradient(ellipse at 50% 0,#1c344b,#080e19 68%);color:#edfaff;padding:14px}
+main{width:min(720px,100%);border:1px solid #85a9c54d;border-radius:26px;background:linear-gradient(140deg,#152a3a,#0a1524);box-shadow:0 25px 90px #0009;overflow:hidden}
+header{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:22px 24px}h1{font-size:23px;letter-spacing:.14em;margin:0}small{color:#a3c0d0}.mirror{height:225px;position:relative;display:grid;place-items:center;overflow:hidden;background:radial-gradient(ellipse,#11384b,#0b192b 68%)}
+.glow{width:185px;height:185px;border-radius:50%;background:radial-gradient(circle,#e9fffd 0%,#7ff8e6 13%,#34a9d0 33%,#305a9b66 60%,transparent 72%);filter:blur(10px);animation:pulse 5.8s ease-in-out infinite}
+.ring{position:absolute;width:260px;height:88px;border:1px solid #8cf5e088;border-radius:50%;transform:rotate(-23deg);box-shadow:0 0 28px #5af5df20;animation:ring 8s ease-in-out infinite}
+.mirror span{position:absolute;letter-spacing:.25em;font-size:12px;text-shadow:0 0 20px #fff}
+@keyframes pulse{0%,100%{opacity:.55;transform:scale(.93);filter:blur(13px)}50%{opacity:1;transform:scale(1.13);filter:blur(7px)}}@keyframes ring{50%{transform:rotate(14deg)}}
+.mirror.working .glow{animation-duration:2.2s}.mirror.input-needed .glow{animation-duration:4s}
+section{padding:20px 24px}h2{font-size:20px;margin:0 0 10px}p{line-height:1.6;color:#c6dce5}.controls{display:flex;flex-wrap:wrap;gap:9px;margin:14px 0}.controls label{display:block;width:100%;font-size:14px;color:#e6f4f8}
+input{font:inherit;width:100%;min-width:0;background:#0b1927;border:1px solid #7899ad;border-radius:12px;color:#fff;padding:12px;margin-top:6px}
+button{font:inherit;cursor:pointer;min-height:44px;background:#1c4256;color:#f4fffe;border:1px solid #83c6c077;border-radius:12px;padding:10px 15px}
+button:focus-visible,input:focus-visible{outline:2px solid #8bfff0;outline-offset:3px}
+form#ask{display:flex;gap:9px;margin-top:20px}form#ask input{margin:0}.muted{font-size:12px;color:#a1bbc9}footer{padding:0 24px 20px;color:#a1bbc9;font-size:12px}
+@media(max-width:460px){form#ask{flex-direction:column}.mirror{height:185px}}
+@media(prefers-reduced-motion:reduce){.glow,.ring{animation:none!important}}
+</style></head><body><main><header><div><h1>JARVIS <span style="color:#8bf1dd">/ ESPELHO</span></h1><small>Uma conversa. As ferramentas certas, quando precisar.</small></div><small>DEMONSTRAÇÃO</small></header>
+<div class="mirror" id="mirror" aria-hidden="true"><div class="glow"></div><div class="ring"></div><span>JARVIS</span></div>
+<section><h2 id="heading">Como posso ajudar?</h2><p id="reply" role="status" aria-live="polite">Diga o que precisa. Quando houver uma informação a preencher, o campo aparecerá aqui.</p><div id="controls" class="controls"></div>
+<form id="ask"><input id="request" aria-label="Pedido ao JARVIS" maxlength="300" placeholder="Ex.: configurar minha empresa" autocomplete="off"><button type="submit">Enviar</button></form>
+<p class="muted">Simulação local sem IA, voz, backend ou armazenamento. Não informe senhas reais. Controles surgem somente conforme a etapa.</p></section><footer>Leve, sem dependências externas. Teclado acessível e animação reduzida quando solicitado pelo dispositivo.</footer></main>
+<script>
+'use strict';
+const flows={
+'company.setup':[{say:'Qual é o nome da empresa?',fields:[{name:'company_name',label:'Nome da empresa'}]},{say:'Em qual segmento sua empresa atua?',fields:[{name:'segment',label:'Segmento'}]},{say:'Cadastro de demonstração preparado. No PULSE real, os dados precisarão de revisão antes de serem salvos.',fields:[]}],
+'customer.find':[{say:'Qual nome ou referência devo procurar?',fields:[{name:'customer_query',label:'Nome ou referência'}]},{say:'Busca simulada. Nenhuma consulta real foi feita.',fields:[]}],
+'project.create':[{say:'Qual problema o novo projeto deve resolver?',fields:[{name:'project_goal',label:'Objetivo do projeto'}]},{say:'Objetivo registrado apenas nesta sessão de demonstração. O próximo passo real seria consultar o catálogo e montar um plano.',fields:[]}],
+'credential.demo':[{say:'Para conectar um serviço real, o JARVIS deverá abrir um formulário protegido, nunca registrar senhas na conversa ou no catálogo. Esta prévia não recebe credenciais.',fields:[]}]
+};
+const intents=[[/empresa|instal|neg[oó]cio|pulse/i,'company.setup'],[/cliente|contato|procurar|buscar/i,'customer.find'],[/projeto|criar|aplicativo|sistema/i,'project.create'],[/senha|credencial|conectar servi/i,'credential.demo']];
+let flow=null,index=0;const controls=document.getElementById('controls'),reply=document.getElementById('reply'),mirror=document.getElementById('mirror'),request=document.getElementById('request');
+function clear(){controls.replaceChildren()}
+function action(label,fn){const b=document.createElement('button');b.type='button';b.textContent=label;b.addEventListener('click',fn);controls.append(b)}
+function home(){flow=null;index=0;mirror.className='mirror';reply.textContent='Diga o que precisa. Posso demonstrar: configurar empresa, encontrar cliente, criar projeto ou conectar serviço.';clear();action('Configurar empresa',()=>start('company.setup'));action('Criar projeto',()=>start('project.create'))}
+function start(id){flow=id;index=0;render()}
+function render(){clear();const step=flows[flow]?.[index];if(!step){home();return}reply.textContent=step.say;mirror.className=step.fields.length?'mirror input-needed':'mirror';if(!step.fields.length){action('Nova tarefa',home);return}
+const form=document.createElement('form');form.id='stepForm';form.style.width='100%';for(const field of step.fields){const label=document.createElement('label');label.textContent=field.label;const input=document.createElement('input');input.name=field.name;input.maxLength=120;input.required=true;input.autocomplete='off';label.append(input);form.append(label)}
+const submit=document.createElement('button');submit.type='submit';submit.textContent='Continuar';form.append(submit);form.addEventListener('submit',e=>{e.preventDefault();if(!form.reportValidity())return;index++;render()});controls.append(form);action('Cancelar',home)}
+document.getElementById('ask').addEventListener('submit',e=>{e.preventDefault();const q=request.value.trim();if(!q)return;request.value='';const match=intents.find(([regex])=>regex.test(q));if(match)start(match[1]);else{clear();reply.textContent='Não tenho uma ferramenta homologada para esse pedido nesta prévia. No JARVIS completo, o planejador deverá buscar no catálogo antes de propor uma nova solução.';action('Voltar',home)}});home();
+</script></body></html>

@@ -1,0 +1,140 @@
+{
+  "schema_version": 1,
+  "name": "JARVIS Shipyard",
+  "status": "scaffold_only",
+  "description": "Orquestrador de tarefas independentes com agentes de escopo limitado; nenhuma IA executa em segundo plano sem worker configurado.",
+  "budgets": {
+    "max_parallel_agents": 3,
+    "max_tokens_per_task": 1800,
+    "max_cost_brl_per_task": 0,
+    "max_attempts": 2
+  },
+  "roles": [
+    {
+      "id": "architect",
+      "scope": [
+        "contracts",
+        "architecture",
+        "dependency_map"
+      ],
+      "write_paths": [
+        "docs/",
+        "toolkit/"
+      ]
+    },
+    {
+      "id": "builder",
+      "scope": [
+        "code",
+        "tests"
+      ],
+      "write_paths": [
+        "toolkit/",
+        "tests/"
+      ]
+    },
+    {
+      "id": "verifier",
+      "scope": [
+        "tests",
+        "audit",
+        "evidence"
+      ],
+      "write_paths": [
+        "docs/",
+        "tests/"
+      ]
+    }
+  ],
+  "task_contract": {
+    "required": [
+      "id",
+      "role",
+      "goal",
+      "inputs",
+      "output_path",
+      "acceptance_tests",
+      "dependencies",
+      "status"
+    ],
+    "states": [
+      "queued",
+      "running",
+      "blocked",
+      "verified",
+      "rejected"
+    ],
+    "never_store": [
+      "tokens",
+      "customer_phone",
+      "chat_content",
+      "clinical_data"
+    ],
+    "requires_human_for": [
+      "production_deploy",
+      "meta_account_changes",
+      "outbound_messages",
+      "billing",
+      "number_migration"
+    ]
+  },
+  "queue": [
+    {
+      "id": "WA-001",
+      "role": "architect",
+      "goal": "Mapear caminhos oficiais de coexistência mantendo número Business",
+      "inputs": [
+        "crm_admin.py",
+        "whatsapp_connection.py",
+        "whatsapp_coexistence.py"
+      ],
+      "output_path": "docs/WHATSAPP_COEXISTENCIA_VALIDACAO.md",
+      "acceptance_tests": [
+        "Nenhuma ação destrutiva",
+        "Distinguir evidência de hipótese"
+      ],
+      "dependencies": [],
+      "status": "queued"
+    },
+    {
+      "id": "WA-002",
+      "role": "builder",
+      "goal": "Revisar caixa de entrada humana no PULSE e expor histórico sanitizado",
+      "inputs": [
+        "crm_admin.py",
+        "panel.html",
+        "human_service.py"
+      ],
+      "output_path": "tests/test_human_inbox_contract.py",
+      "acceptance_tests": [
+        "Autorização",
+        "Pausa humana",
+        "Sem envio automático involuntário"
+      ],
+      "dependencies": [
+        "WA-001"
+      ],
+      "status": "queued"
+    },
+    {
+      "id": "WA-003",
+      "role": "verifier",
+      "goal": "Validar fluxo de instalação e catalogar erros reproduzíveis",
+      "inputs": [
+        "toolkit/playbooks/registry.v1.json",
+        "toolkit/project-run-template.v1.json"
+      ],
+      "output_path": "docs/WHATSAPP_INSTALACAO_TESTES.md",
+      "acceptance_tests": [
+        "Número preservado",
+        "Rollback",
+        "Custo controlado"
+      ],
+      "dependencies": [
+        "WA-001",
+        "WA-002"
+      ],
+      "status": "queued"
+    }
+  ]
+}

@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "project_id": "jarvis-pulse",
+  "recipes": [
+    {
+      "id": "pulse-existing-number-coexistence",
+      "path": "toolkit/playbooks/pulse-existing-number.v1.json",
+      "status": "draft_unverified",
+      "source": "project_build",
+      "requires": [
+        "business_app_active",
+        "official_coexistence_eligibility"
+      ],
+      "tags": [
+        "meta",
+        "whatsapp",
+        "existing_number",
+        "install_and_use"
+      ]
+    }
+  ],
+  "quality_gates": [
+    "evidence",
+    "repeatability",
+    "rollback",
+    "privacy",
+    "cost",
+    "few_clicks"
+  ],
+  "optimization_targets": {
+    "fewer_clicks": true,
+    "shorter_installation": true,
+    "reuse_existing_protocols": true,
+    "low_compute": true
+  }
+}
