@@ -2,6 +2,13 @@
 
 Status: proposta operacional para revisão dos manifestos originais. Não substitui nem altera manifestos existentes.
 
+## Por que esta regra existe — finalidade e intenção
+O JARVIS/PULSE não deve nascer, crescer ou evoluir como uma coleção dispersa de funcionalidades, improvisos e decisões desconectadas. Cada componente precisa derivar de um propósito reconhecível, integrar-se aos demais e fortalecer uma arquitetura coerente, em vez de criar caminhos paralelos, contradições, retrabalho ou dependências desnecessárias.
+
+A leitura dos manifestos e dos motivos por trás de cada decisão estabelece continuidade de identidade, direção e critérios. O objetivo não é engessar a evolução: é permitir expansão orgânica, ordenada e verificável, preservando a visão original enquanto novos conhecimentos aprimoram a execução. Antes de perguntar **o que construir**, esclarecer **por que existe, a quem serve, como se relaciona com o conjunto e para onde conduz**.
+
+**Abrangência universal:** este princípio orienta todas as frentes do ecossistema — núcleo JARVIS, PULSE, Nova Vida, atendimento, prospecção, memória, interface, automações, integrações, cobrança, segurança, documentação, testes, instalação, comercialização e futuros segmentos. Deve valer para agentes humanos e de IA, em qualquer ambiente de trabalho, inclusive fora do Work. A aplicação deve ser proporcional ao risco: consultas simples não exigem auditoria extensa; mudanças estruturais exigem leitura integral dos fundamentos e rastreabilidade.
+
 ## Regra anterior a qualquer mudança
 Antes de planejar, codificar, publicar ou alterar integrações, o executor deve localizar e ler os manifestos de identidade, propósito, essência e pilares do JARVIS/PULSE, as diretrizes vigentes, decisões com seus porquês, arquitetura, checkpoints, pendências e evidências de produção pertinentes. Se algum documento fundamental não for localizado, declarar a lacuna e limitar-se a inspeção ou alterações isoladas reversíveis até reconciliá-la.
 
@@ -22,3 +29,6 @@ Os manifestos originais e decisões expressas do proprietário são a referênci
 
 ## Critério de início
 Nenhuma tarefa é considerada alinhada sem: fontes consultadas, lacunas declaradas, justificativa conectada aos pilares e evidências do estado atual. Este protocolo só se torna política definitiva após confronto com os manifestos originais e aprovação do proprietário.
+
+## Verificação transversal antes de implementar
+Para qualquer iniciativa, registrar: (1) qual necessidade real atende; (2) qual princípio ou decisão a fundamenta; (3) como reutiliza capacidades existentes; (4) quais módulos e dados afeta; (5) quais alternativas foram rejeitadas e por quê; (6) como medir se fortalece o sistema; (7) como reverter sem perda de eventos ou histórico. Evitar duplicação, acoplamento acidental e crescimento sem finalidade.
