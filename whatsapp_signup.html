@@ -7,16 +7,17 @@
 'use strict';
 const signupEnabled=__ENABLED__,appId='__APP_ID__',configId='__CONFIG_ID__';
 const status=document.getElementById('status'),start=document.getElementById('start');
-let sdkReady=false,loading=false,launchActive=false;
+let sdkReady=false,loading=false,launchActive=false,signupFinished=false;
 function say(message){status.textContent=message;}
 function launch(){
   if(!sdkReady||launchActive)return;
-  launchActive=true;
+  launchActive=true;signupFinished=false;
   say('Continue na janela oficial da Meta. A conexão ainda será conferida no PULSE.');
   FB.login(response=>{
     launchActive=false;
     // OAuth code belongs only to this transient callback. Never store, display,
     // log or exchange it here; the existing production token remains untouched.
+    if(signupFinished)return;
     say(response&&response.authResponse?'Autorização recebida da Meta, mas o PULSE ainda não trocou o código por credenciais nem concluiu a integração. Não considere o número conectado. Volte ao painel para diagnóstico.':'Cadastro não concluído. Volte ao PULSE para conferir o atendimento.');
   },{config_id:configId,response_type:'code',override_default_response_type:true,
     extras:{version:'v4',featureType:'whatsapp_business_app_onboarding',sessionInfoVersion:'3'}});
@@ -28,7 +29,7 @@ window.addEventListener('message',event=>{
   if(!payload||!['WA_EMBEDDED_SIGNUP','WHATSAPP_EMBEDDED_SIGNUP'].includes(payload.type))return;
   if(payload.event==='CANCEL'){launchActive=false;say('Cadastro interrompido. Volte ao PULSE para conferir o atendimento.');}
   else if(payload.event==='ERROR'){launchActive=false;say('A Meta não concluiu o cadastro. Não desconecte o número atual.');}
-  else if(['FINISH','FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING'].includes(payload.event)){launchActive=false;say('A Meta concluiu a etapa visual. Ainda faltam troca segura do código, vínculo de ativos e verificação da API. Não considere a conexão pronta.');}
+  else if(['FINISH','FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING'].includes(payload.event)){signupFinished=true;launchActive=false;say('A Meta concluiu a etapa visual. Ainda faltam troca segura do código, vínculo de ativos e verificação da API. Não considere a conexão pronta.');}
 });
 start.onclick=()=>{
   if(!signupEnabled||loading)return;
