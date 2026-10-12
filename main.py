@@ -29,6 +29,7 @@ import business_profile
 import customer_care
 import contact_options
 from whatsapp_coexistence import text_echo, record_text_echo
+from instant_greeting import greeting_for_first_contact
 from device_access import DeviceAccess
 from conversation_service import ConversationService, delivery_status
 from media_service import send_photo
@@ -389,7 +390,7 @@ async def _process_message(message):
                   and not reason and not profile.get('human_mode')
                   and not profile.get('human_only')
                   and not profile.get('do_not_contact')
-                  and (instant := __import__('instant_greeting').greeting_for_first_contact(
+                  and (instant := greeting_for_first_contact(
                       business=business_profile.business(),
                       inbound_text=message['text']['body'],
                       prior_inbound_count=profile.get('inbound_count', 0)-1,
