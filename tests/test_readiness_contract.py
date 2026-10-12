@@ -33,6 +33,13 @@ class ReadinessContract(unittest.TestCase):
             self.assertIn(marker, page)
         self.assertIn("mirror-first", page)
 
+    def test_whatsapp_readonly_diagnostic_in_manual_panel(self):
+        page = PANEL.read_text(encoding="utf-8")
+        self.assertIn('id="checkWhatsAppReadiness"', page)
+        self.assertIn("api('whatsapp/connection')", page)
+        self.assertIn("api_read_access", page)
+        self.assertIn("coexistence_status", page)
+
     def test_installer_has_no_external_dependencies(self):
         page = INSTALLER.read_text(encoding="utf-8")
         self.assertNotIn("<script src=", page)
