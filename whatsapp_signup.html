@@ -25,10 +25,10 @@ window.addEventListener('message',event=>{
   if(!signupEnabled||!launchActive||!['https://www.facebook.com','https://web.facebook.com','https://business.facebook.com'].includes(event.origin))return;
   let payload;
   try{payload=typeof event.data==='string'?JSON.parse(event.data):event.data;}catch{return;}
-  if(!payload||payload.type!=='WHATSAPP_EMBEDDED_SIGNUP')return;
+  if(!payload||!['WA_EMBEDDED_SIGNUP','WHATSAPP_EMBEDDED_SIGNUP'].includes(payload.type))return;
   if(payload.event==='CANCEL')say('Cadastro interrompido. Volte ao PULSE para conferir o atendimento.');
   else if(payload.event==='ERROR')say('A Meta não concluiu o cadastro. Não desconecte o número atual.');
-  else if(payload.event==='FINISH')say('A Meta retornou uma etapa concluída. A conexão e a sincronização ainda precisam ser verificadas.');
+  else if(['FINISH','FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING'].includes(payload.event))say('A Meta retornou conclusão do cadastro. Volte ao PULSE e confirme se o número continua no aplicativo e se a API responde.');
 });
 start.onclick=()=>{
   if(!signupEnabled||loading)return;
