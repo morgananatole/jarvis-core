@@ -141,6 +141,60 @@ class WaitingTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(self.db.contacts.docs[key]['ai_waiting_assist'])
         self.assertNotEqual(self.db.human_requests.docs[key]['wait_episode'], 'first-request')
 
+    async def test_explicit_panel_takeover_never_restarts_ai_after_wait(self):
+        key = await self.waiting()
+        profile = await ContactMemory(self.db).ensure(self.phone)
+        await self.service.mode(profile['contact_no'], True)
+        self.db.human_requests.docs[key]['pending_since'] = self.now
+        compose = AsyncMock(return_value='Automação indevida')
+        worker = WaitingService(self.db, self.send, lambda _: True,
+            clock=lambda: self.now + timedelta(minutes=30), compose=compose)
+        self.assertEqual((await worker.run_one(key))['state'], 'human_takeover')
+        compose.assert_not_awaited()
+        self.send.assert_not_awaited()
+        self.assertFalse(self.db.contacts.docs[key]['ai_waiting_assist'])
+        # Stale support flags cannot bypass an explicit operator takeover.
+        self.db.contacts.docs[key]['ai_waiting_assist'] = True
+        self.assertFalse(can_assist(self.db.contacts.docs[key], self.db.human_requests.docs[key]))
+
+    async def test_panel_takeover_blocks_contact_menu_until_explicit_resume(self):
+        import main
+        key = await self.waiting()
+        profile = await ContactMemory(self.db).ensure(self.phone)
+        await self.service.mode(profile['contact_no'], True)
+        inbox = Store(); inbox.database = self.db
+        info = {'phone': '5581999991111', 'display': '+55 81 99999-1111'}
+        with patch.object(main, 'inbox', inbox), patch.object(main, 'send_reply', self.send), \
+                patch.object(main, 'generate_reply', AsyncMock(return_value='Resposta retomada')) as ai, \
+                patch.object(main.contact_options, 'contact', AsyncMock(return_value=info)):
+            for i, text in enumerate(['Qual o valor?', 'Me envie o telefone']):
+                await main.process_message({'id': 'panel-in-' + str(i), 'from': self.phone,
+                    'timestamp': str(self.now.timestamp()), 'text': {'body': text}})
+                self.assertEqual(inbox.docs['panel-in-' + str(i)]['state'], 'human_waiting')
+            ai.assert_not_awaited()
+            self.send.assert_not_awaited()
+            # Operator can still answer manually, and only explicit resume enables AI.
+            await self.service.reply(profile['contact_no'], 'Já estou atendendo.',
+                'nonce-panel-12345678901234')
+            self.send.assert_awaited_once()
+            self.send.reset_mock()
+            await self.service.mode(profile['contact_no'], False)
+            await main.process_message({'id': 'panel-resumed', 'from': self.phone,
+                'timestamp': str(self.now.timestamp()), 'text': {'body': 'Qual o valor?'}})
+            ai.assert_awaited_once()
+            self.send.assert_awaited_once()
+
+    async def test_new_request_after_resume_does_not_inherit_operator_control(self):
+        key = await self.waiting()
+        profile = await ContactMemory(self.db).ensure(self.phone)
+        await self.service.mode(profile['contact_no'], True)
+        await self.service.mode(profile['contact_no'], False)
+        await self.service.request(self.phone, 'new-customer-request', 'customer_request')
+        self.db.human_requests.docs[key]['pending_since'] = self.now
+        self.assertEqual(self.db.contacts.docs[key]['human_takeover_source'], 'customer_request')
+        self.assertEqual((await self.worker().run_one(key))['state'], 'accepted')
+        self.send.assert_awaited_once()
+
     async def test_due_scan_excludes_already_notified_records(self):
         self.db.human_requests.find = unittest.mock.Mock()
         self.db.human_requests.find.return_value.sort.return_value.limit.return_value.to_list = AsyncMock(return_value=[])

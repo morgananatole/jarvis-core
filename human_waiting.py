@@ -8,7 +8,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 from pymongo.errors import DuplicateKeyError
 from contact_memory import ContactMemory
-from human_service import active_window, conversation_lock
+from human_service import active_window, conversation_lock, operator_has_control
 
 WAIT = timedelta(minutes=5)
 log = logging.getLogger('jarvis')
@@ -48,7 +48,7 @@ def utc(value):
 
 def can_assist(profile, queue):
     return bool(profile.get('ai_waiting_assist') and not profile.get('human_only')
-                and profile.get('human_takeover_source') != 'whatsapp_business_app'
+                and not operator_has_control(profile)
                 and not profile.get('do_not_contact')
                 and profile.get('facts', {}).get('contact_permission', {}).get('value') != 'declined'
                 and queue and queue.get('state') in {'waiting', 'active'}
@@ -77,7 +77,7 @@ class WaitingService:
             now = self.clock()
             if not queue or not profile or not profile.get('human_mode'):
                 return {'state': 'not_waiting'}
-            if profile.get('human_takeover_source') == 'whatsapp_business_app':
+            if operator_has_control(profile):
                 return {'state': 'human_takeover'}
             if queue.get('state') not in {'waiting', 'active'}:
                 return {'state': 'not_waiting'}

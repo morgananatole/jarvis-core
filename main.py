@@ -20,7 +20,7 @@ from openai import AsyncOpenAI
 from pymongo.errors import DuplicateKeyError, InvalidURI, ConfigurationError, OperationFailure
 from ai_router import ReplyRouter
 from contact_memory import ContactMemory, contact_key
-from human_service import HumanService, conversation_lock, takeover_reason, exclusive_human
+from human_service import HumanService, conversation_lock, takeover_reason, exclusive_human, operator_has_control
 from human_waiting import WaitingService, can_assist, SUPPORT_GUIDANCE, DIRECT_CONTACT_GUIDANCE
 from ai_router import UNAVAILABLE
 import knowledge_base
@@ -356,7 +356,7 @@ async def _process_message(message):
         direct_info = await contact_options.contact(inbox.database) if direct_requested and not reason else None
         if (profile.get('human_mode') or reason) and not assisting and not (
                 direct_info and not profile.get('do_not_contact')
-                and profile.get('human_takeover_source') != 'whatsapp_business_app'):
+                and not operator_has_control(profile)):
             new = await human.request(message['from'], message['id'], reason or 'human_conversation')
             if not new:
                 await inbox.update_one(guard, {'$set': {'state': 'human_waiting'}})
