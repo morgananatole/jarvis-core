@@ -10,6 +10,8 @@ def mode_status(env=None):
                                   and env.get("AI_ALLOWED_TEST_ONLY", "true") == "true")
     return {
         "reply_mode": mode,
+        "instant_greeting_enabled": env.get("NOVA_VIDA_INSTANT_GREETING", "false").lower() == "true",
+        "typing_indicator_enabled": env.get("WHATSAPP_TYPING_INDICATOR_ENABLED", "false").lower() == "true",
         "test_only": test_only,
         "followups_automatic_enabled": env.get("CONVERSATION_EXECUTOR_ENABLED", "false") == "true",
         "paid_fallback_configured": (
