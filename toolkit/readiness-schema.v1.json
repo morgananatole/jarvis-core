@@ -1,0 +1,91 @@
+{
+  "version": 1,
+  "stages": [
+    {
+      "id": "service",
+      "title": "Serviço",
+      "evidence": "ready",
+      "requires": [
+        "status",
+        "database",
+        "missing_config"
+      ]
+    },
+    {
+      "id": "meta",
+      "title": "Conta Meta",
+      "evidence": "official_account_review",
+      "requires": [
+        "waba",
+        "number_status"
+      ]
+    },
+    {
+      "id": "api",
+      "title": "API Meta",
+      "evidence": "authorized_diagnostic",
+      "requires": [
+        "api_read_access",
+        "coexistence_status"
+      ]
+    },
+    {
+      "id": "webhook",
+      "title": "Webhook",
+      "evidence": "signed_inbound_event",
+      "requires": [
+        "signature_valid",
+        "number_match"
+      ]
+    },
+    {
+      "id": "delivery",
+      "title": "Entrega",
+      "evidence": "authorized_test",
+      "requires": [
+        "accepted",
+        "delivered"
+      ]
+    },
+    {
+      "id": "coexistence",
+      "title": "Coexistência",
+      "evidence": "official_validation",
+      "requires": [
+        "business_app_connected",
+        "app_receipt"
+      ]
+    },
+    {
+      "id": "pulse",
+      "title": "PULSE",
+      "evidence": "end_to_end",
+      "requires": [
+        "login",
+        "human_pause",
+        "inbox"
+      ]
+    },
+    {
+      "id": "go_no_go",
+      "title": "Prontidão",
+      "evidence": "review",
+      "requires": [
+        "blockers_resolved",
+        "rollback_documented"
+      ]
+    }
+  ],
+  "states": [
+    "pending",
+    "passed",
+    "blocked",
+    "skipped"
+  ],
+  "rules": {
+    "no_secrets": true,
+    "no_customer_data": true,
+    "no_false_completion": true,
+    "production_actions_require_authorization": true
+  }
+}
