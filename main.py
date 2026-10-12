@@ -385,6 +385,17 @@ async def _process_message(message):
                          'uma ligação pode ser uma alternativa às mensagens; não tenho confirmação de disponibilidade. '
                          'Escolha o canal abaixo. Continuo por aqui para ajudar.')
                 contact_menu = True
+            elif (os.getenv('NOVA_VIDA_INSTANT_GREETING', 'false').lower() == 'true'
+                  and not reason and not profile.get('human_mode')
+                  and not profile.get('human_only')
+                  and not profile.get('do_not_contact')
+                  and (instant := __import__('instant_greeting').greeting_for_first_contact(
+                      business=business_profile.business(),
+                      inbound_text=message['text']['body'],
+                      prior_inbound_count=profile.get('inbound_count', 0)-1,
+                      human_mode=profile.get('human_mode', False),
+                      do_not_contact=profile.get('do_not_contact', False)))):
+                reply = instant
             elif assisting:
                 reply = await generate_reply(message["text"]["body"], message["from"], message["id"], waiting_for_human=True)
             else:
