@@ -30,6 +30,7 @@ import customer_care
 import contact_options
 from whatsapp_coexistence import text_echo, record_text_echo
 from instant_greeting import greeting_for_first_contact
+from whatsapp_typing import send_typing_indicator
 from device_access import DeviceAccess
 from conversation_service import ConversationService, delivery_status
 from media_service import send_photo
@@ -358,6 +359,9 @@ async def _process_message(message):
             reason = reason or 'customer_request'
         queue = await inbox.database.human_requests.find_one({'_id': profile['_id']})
         assisting = profile.get('human_mode') and not reason and can_assist(profile, queue)
+        # Best effort: a genuine, bounded Meta typing indicator while preparing a reply.
+        # Disabled by default; never blocks or changes the business-number registration.
+        await send_typing_indicator(message['id'])
         contact_menu = False
         direct_requested = contact_options.selected(message) or contact_options.requested(message['text']['body'])
         direct_info = await contact_options.contact(inbox.database) if direct_requested and not reason else None
