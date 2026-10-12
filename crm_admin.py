@@ -26,6 +26,7 @@ from project_continuity import ContinuityJournal, VersionConflict
 from setup_terms import SetupTerms
 from knowledge_center import read_bundle
 from outreach_overview import overview
+from assisted_outreach import AssistedOutreach
 
 
 def authorize(request: Request):
@@ -87,6 +88,42 @@ def router(database, conversation):
             return jsonable_encoder(result)
         except ValueError as error:
             raise HTTPException(409 if str(error) in {'intake_busy', 'idempotency_conflict'} else 400, str(error))
+
+    @api.get('/assisted-outreach', dependencies=[Depends(authorize)])
+    async def assisted_list(offset: int = 0):
+        try: return jsonable_encoder(await AssistedOutreach(db()).list(offset))
+        except ValueError as error: raise HTTPException(400, str(error))
+
+    @api.post('/assisted-outreach', dependencies=[Depends(authorize)])
+    async def assisted_prepare(request: Request):
+        if len(await request.body()) > 4096: raise HTTPException(413, 'draft_too_large')
+        try:
+            return await AssistedOutreach(db()).prepare(await request.json(), request.headers.get('idempotency-key'))
+        except ValueError as error:
+            raise HTTPException(409, str(error))
+
+    @api.post('/assisted-outreach/{identity}/open', dependencies=[Depends(authorize)])
+    async def assisted_open(identity: str):
+        try: return await AssistedOutreach(db()).open(identity)
+        except ValueError as error: raise HTTPException(409, str(error))
+
+    @api.post('/assisted-outreach/{identity}/report', dependencies=[Depends(authorize)])
+    async def assisted_report(identity: str, request: Request):
+        if len(await request.body()) > 512: raise HTTPException(413, 'report_too_large')
+        try:
+            body = await request.json()
+            if not isinstance(body, dict): raise ValueError('invalid_report')
+            return await AssistedOutreach(db()).report(identity, body.get('state'))
+        except ValueError as error: raise HTTPException(409, str(error))
+
+    @api.post('/assisted-outreach/{identity}/permission', dependencies=[Depends(authorize)])
+    async def assisted_permission(identity: str, request: Request):
+        if len(await request.body()) > 1024: raise HTTPException(413, 'permission_too_large')
+        try:
+            body = await request.json()
+            if not isinstance(body, dict): raise ValueError('permission_evidence_required')
+            return await AssistedOutreach(db()).permission(identity, body.get('reference'))
+        except ValueError as error: raise HTTPException(409, str(error))
 
     @api.get('/intake')
     async def intake_list():
