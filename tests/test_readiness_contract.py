@@ -33,6 +33,13 @@ class ReadinessContract(unittest.TestCase):
             self.assertIn(marker, page)
         self.assertIn("mirror-first", page)
 
+    def test_readiness_log_is_inside_authenticated_workspace(self):
+        page = PANEL.read_text(encoding="utf-8")
+        self.assertLess(page.index('id="workspace"'), page.index('id="readinessGuide"'))
+        self.assertIn('id="readinessSave"', page)
+        self.assertIn('id="readinessCopy"', page)
+        self.assertIn("entries=names.map", page)
+
     def test_whatsapp_readonly_diagnostic_in_manual_panel(self):
         page = PANEL.read_text(encoding="utf-8")
         self.assertIn('id="checkWhatsAppReadiness"', page)
