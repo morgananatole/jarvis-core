@@ -41,6 +41,12 @@ def active_window(profile, now=None):
     return bool(last and now - timedelta(hours=23) < last <= now)
 
 
+def operator_has_control(profile):
+    """An explicit takeover lasts until the operator returns the conversation."""
+    return bool(profile.get('human_mode') and profile.get('human_takeover_source')
+                in {'panel', 'whatsapp_business_app'})
+
+
 def exclusive_human(text):
     value = ''.join(c for c in unicodedata.normalize('NFD', text.casefold())
                     if unicodedata.category(c) != 'Mn')
@@ -73,7 +79,8 @@ class HumanService:
             queue_reason = 'urgent'
         if new:
             await self.db.contacts.update_one({'_id': profile['_id']}, {'$set': {
-                'human_mode': True, 'human_since': now}, '$inc': {'automation_epoch': 1}})
+                'human_mode': True, 'human_since': now,
+                'human_takeover_source': 'customer_request'}, '$inc': {'automation_epoch': 1}})
         await self.db.human_requests.update_one({'_id': profile['_id']}, {'$set': {
             'contact_no': profile['contact_no'], 'reason': queue_reason,
             'source_message_id': source_id, 'updated_at': now, 'unread': True, **waiting},
