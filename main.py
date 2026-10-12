@@ -359,9 +359,6 @@ async def _process_message(message):
             reason = reason or 'customer_request'
         queue = await inbox.database.human_requests.find_one({'_id': profile['_id']})
         assisting = profile.get('human_mode') and not reason and can_assist(profile, queue)
-        # Best effort: a genuine, bounded Meta typing indicator while preparing a reply.
-        # Disabled by default; never blocks or changes the business-number registration.
-        await send_typing_indicator(message['id'])
         contact_menu = False
         direct_requested = contact_options.selected(message) or contact_options.requested(message['text']['body'])
         direct_info = await contact_options.contact(inbox.database) if direct_requested and not reason else None
@@ -403,8 +400,10 @@ async def _process_message(message):
                       do_not_contact=profile.get('do_not_contact', False)))):
                 reply = instant
             elif assisting:
+                asyncio.create_task(send_typing_indicator(message['id']))
                 reply = await generate_reply(message["text"]["body"], message["from"], message["id"], waiting_for_human=True)
             else:
+                asyncio.create_task(send_typing_indicator(message['id']))
                 reply = await generate_reply(message["text"]["body"], message["from"], message["id"])
             if reply == UNAVAILABLE:
                 await human.request(message['from'], message['id'], 'ai_unavailable')
