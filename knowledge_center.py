@@ -3,7 +3,7 @@ import hashlib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
-CORE = ['CENTRAL_NORMAS.md', 'AGENTS.md', 'docs/MISSAO_ATENDIMENTO.md',
+CORE = ['DIRETRIZ_DOIS_PROCESSOS_IA.md', 'CENTRAL_NORMAS.md', 'AGENTS.md', 'docs/MISSAO_ATENDIMENTO.md',
         'docs/CONTRATO_EXPERIENCIA.md', 'docs/IA_EMPRESA_E_ATENDIMENTO.md',
         'docs/DECISOES_PRODUTO_2026-10-11.md']
 SUMMARY = ('Aplicar decisões expressas e atuais do proprietário, distinguindo ideia de diretriz. '

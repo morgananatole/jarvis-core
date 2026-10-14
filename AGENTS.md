@@ -47,3 +47,7 @@ Conversa natural é o centro; exemplos são referências de tom, nunca roteiros
 obrigatórios. Botões contextuais nascem na caixa e levam à função permitida, com
 a assistente acompanhando a navegação interna. Não chamar animação de voz real,
 rascunho de perfil ativo, teste simulado de entrega real ou licença de isolamento.
+
+## Preparação e interação por objetivo
+
+Ler DIRETRIZ_DOIS_PROCESSOS_IA.md e aplicar ao projetar novos fluxos. Usar preparação contextual e base empresarial aprovada antes da resposta; normalização não substitui texto original como evidência. Avaliar objetivo, segmento, público/região, memória, latência, repetição e próximos passos. Botões contextuais usam destinos já permitidos; não ocultar funções essenciais sem alternativa acessível. Reaproveitar componentes e testar o fluxo real antes de declarar aplicação em todos os projetos.
