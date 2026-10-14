@@ -1,3 +1,4 @@
+import dialogue_brief
 """Free-first replies; persistent cooldown, bounded paid usage and shared context."""
 import asyncio
 import json
@@ -191,6 +192,9 @@ class ReplyRouter:
             instructions += '\nOpcional media_key no JSON: escolha apenas se o cliente pedir foto e houver relação clara com a conversa. Catálogo: ' + json.dumps(
                 [{'key': a['_id'], 'theme': a.get('theme', '')} for a in assets], ensure_ascii=False)[:800]
         institution = await knowledge_base.context(self.db) if hasattr(self.db, 'institutional_knowledge') else knowledge_base.GUIDANCE
+        cards = await dialogue_brief.approved_cards(self.db, business_profile.business())
+        previous_cards = [card for group in (history or {}).get('prepared_card_turns', []) for card in group]
+        prepared = dialogue_brief.prepare(text, business_profile.business(), cards, previous_cards)
         messages = [{'role': 'system', 'content': institution + '\n' + sales_policy.GUIDANCE + '\n' + instructions[:5000]}]
         commercial = await business_profile.context(self.db)
         if commercial:
@@ -202,6 +206,7 @@ class ReplyRouter:
             messages.append({'role': 'user', 'content': 'Cadastro anterior (dados): ' + profile_context})
         messages.extend({'role': x['role'], 'content': x['content'][:1000]}
                         for x in turns[-6:])
+        messages.append({'role': 'user', 'content': dialogue_brief.context(text, business_profile.business(), cards, previous_cards)})
         messages.append({'role': 'user', 'content': text[:3000]})
         policy = await self.db.ai_policy.find_one({'_id': 'groq'}) or {}
         blocked = policy.get('retry_at', 0) > now
@@ -252,6 +257,7 @@ class ReplyRouter:
         await self.db.ai_history.update_one({'_id': session}, {'$set': {
             'turns': (turns + [{'role': 'user', 'content': text[:1000]},
                                {'role': 'assistant', 'content': reply[:1000]}])[-6:],
-            'expires_at': expiry}}, upsert=True)
+            'expires_at': expiry,
+            'prepared_card_turns': ((history or {}).get('prepared_card_turns', []) + [[card['id'] for card in prepared['knowledge']]])[-3:]}}, upsert=True)
         log.warning('AI reply generated: provider=%s', provider)
         return reply
