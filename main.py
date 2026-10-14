@@ -155,6 +155,9 @@ app = FastAPI(title="JARVIS Core", lifespan=lifespan)
 app.include_router(crm_router(lambda: inbox.database if inbox is not None else None,
     lambda db: ConversationService(db, send_reply, authorized_test_sender)))
 app.include_router(enrollment_router(lambda: inbox.database if inbox is not None else None))
+from execution_hub import router as execution_router
+from crm_admin import authorize as execution_owner_authorize
+app.include_router(execution_router(lambda: inbox.database if inbox is not None else None, execution_owner_authorize))
 from pix_billing import billing_router
 app.include_router(billing_router(lambda: inbox.database if inbox is not None else None))
 app.get('/painel')(panel)
