@@ -1,0 +1,12 @@
+[Unit]
+Description=JARVIS executor do proprietário
+After=network-online.target
+[Service]
+Type=simple
+WorkingDirectory=/CAMINHO/jarvis-core
+ExecStart=/CAMINHO/jarvis-core/.executor-venv/bin/python -m connectors.agent run
+Restart=on-failure
+RestartSec=10
+# Serviço de usuário: sessão gráfica, DISPLAY e PATH devem estar disponíveis.
+[Install]
+WantedBy=default.target

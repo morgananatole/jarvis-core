@@ -1,0 +1,6 @@
+cryptography>=46,<51
+Pillow>=12,<13
+PyAutoGUI==0.9.54
+google-auth>=2,<3
+google-auth-oauthlib>=1,<2
+mcp>=1.26,<3
