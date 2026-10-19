@@ -10,3 +10,7 @@ Acessível a todos: linguagem simples, teclado, leitor de tela, contraste, erros
 Qualidade econômica: otimizar custo por resultado validado, não custo isolado.
 Memória e continuidade: checkpoint por projeto, logs, backup, índice recuperável e manual de instalação e uso.
 O AI Hub é um recurso opt-in desabilitado até validação e ativação consciente.
+
+## Economia e conectividade
+Priorizar execução gratuita e local sempre que satisfizer critérios objetivos de qualidade; comparar alternativas gratuitas, cotas, custo real, latência e confiabilidade. Não degradar silenciosamente o resultado.
+No primeiro uso, inventariar pontes possíveis e oferecer configuração centralizada de permissões específicas com finalidade clara, consentimento, teste, revogação e reconexão. Preparar conectores sem ativá-los nem consumir recursos automaticamente.
