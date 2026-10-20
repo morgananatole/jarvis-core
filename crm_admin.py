@@ -314,6 +314,27 @@ def router(database, conversation):
         from whatsapp_connection import diagnostic
         return await diagnostic()
 
+    @api.get('/whatsapp/recovery/identity', dependencies=[Depends(authorize)])
+    async def recovery_identity():
+        from whatsapp_recovery import open_recovery
+        return await open_recovery(db(), 'identity')
+
+    @api.get('/whatsapp/recovery/status', dependencies=[Depends(authorize)])
+    async def recovery_status():
+        from whatsapp_recovery import open_recovery
+        return await open_recovery(db(), 'status')
+
+    @api.post('/whatsapp/recovery/deregister', dependencies=[Depends(authorize)])
+    async def recovery_deregister(request: Request):
+        from whatsapp_recovery import open_recovery
+        if len(await request.body()) > 1024:
+            raise HTTPException(413, 'recovery_request_too_large')
+        try:
+            body = await request.json()
+        except ValueError:
+            raise HTTPException(400, 'invalid_recovery_request') from None
+        return await open_recovery(db(), 'execute', body)
+
     @api.get('/institution')
     async def institution():
         return jsonable_encoder(await db().institutional_knowledge.find_one({'_id': 'nova_vida'}))
